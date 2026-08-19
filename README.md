@@ -331,10 +331,13 @@ make it checkable, from three different directions:
    linked to that exact revision on GitHub — one click from the page you are
    looking at to the code that served it, naming the revision rather than a
    branch that has moved since.
-3. **A check keeps testing the claim.** Railway builds from GitHub but reports
-   nothing back to it, so
+3. **A check keeps testing the claim.** Railway posts its own deployments to
+   this repo, which is worth something — it is Railway, not me, saying it built
+   this commit — but it points at a Railway dashboard nobody outside the account
+   can open, and it describes what Railway *built* rather than what the domain
+   is *serving*. So
    [`.github/workflows/verify-deployment.yml`](.github/workflows/verify-deployment.yml)
-   closes the loop from the outside: after every push to `main`, and again once
+   closes that gap from the outside: after every push to `main`, and again once
    a day, it fetches `/version` off the public site and compares the commit it
    names against the commit GitHub saw. A match is recorded as a deployment on
    this repo's **Environments → production** panel, linked to the live URL; a

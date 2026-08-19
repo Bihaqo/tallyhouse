@@ -1,13 +1,15 @@
 # Checks that the live instance is serving this repo, and records the result on
 # GitHub where anyone can read it.
 #
-# Railway builds from GitHub but reports nothing back to it, so without this the
-# claim "tallyhouse.net runs this code" rests entirely on the operator saying
-# so. Here the claim is tested from outside instead: fetch /version off the
-# public site and compare the commit it names against the commit GitHub just
-# saw pushed. Agreement is recorded as a deployment on the repo's Environments
-# panel, linked to the live URL; disagreement is a failed run with the two
-# commits printed, which is what a site that stopped following main looks like.
+# Railway does post its own deployments here, and those are worth something —
+# it is the builder rather than the operator saying which commit it built. But
+# their environment_url is a Railway dashboard nobody outside the account can
+# open, and "Railway built it" is not "the domain is serving it". So this tests
+# the claim from outside instead: fetch /version off the public site and compare
+# the commit it names against the commit GitHub just saw pushed. Agreement is
+# recorded as a deployment on the repo's Environments panel, linked to the live
+# URL; disagreement is a failed run with the two commits printed, which is what
+# a site that stopped following main looks like.
 #
 # It runs daily as well as on push because "was deployed once" and "is deployed"
 # are different claims, and only the second is worth anything to a visitor.
