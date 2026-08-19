@@ -139,6 +139,16 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .card h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
 .card .sub { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+/* A card's own state, rather than an explanation of it — a rule that is switched
+   off, a key that is missing. Bordered so it reads before the prose under it. */
+.card .sub.settings-warn {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--page);
+  color: var(--text-secondary);
+}
+.card .sub.settings-warn[hidden] { display: none; }
 
 .grid-2 {
   display: grid;
@@ -852,6 +862,17 @@ textarea.rule-patterns:focus { outline: 2px solid var(--accent); border-color: t
   color: var(--text-muted);
 }
 #ai-back { margin-top: 8px; }
+
+/* The AI settings, grouped in a fieldset only so one `disabled` can switch the
+   lot off when no OpenAI key was given. Stripped of the browser's box, which
+   would otherwise draw a frame around half the step for no reason.
+
+   Faded per element rather than on the fieldset itself: opacity on the group
+   would take the estimate box down with it, and that box is the one thing in
+   there still worth reading when the review is off. */
+.bare-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.bare-fieldset:disabled label,
+.bare-fieldset:disabled .field-hint { opacity: 0.55; }
 
 /* Setup step three: the proposed category list, editable in place. */
 .suggest-title { font-size: 15px; margin: 20px 0 4px; }

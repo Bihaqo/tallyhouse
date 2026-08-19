@@ -187,6 +187,100 @@ test('a review window outside the allowed range is refused, and nothing is set u
   assert.equal('aiWebSearch' in doc, false);
 });
 
+test('setup finishes with no OpenAI key, and stores none', { skip }, async () => {
+  // The AI review is the only thing that needs one, and it is allowed to be off:
+  // an account with no key still has its transactions, rules and categories.
+  const call = await newAccount('no-openai');
+  assert.equal((await call('/api/onboarding/scan', { lunchflow: 'lf-key' })).status, 200);
+
+  const done = await call('/api/onboarding', {
+    lunchflow: 'lf-key',
+    currency: 'GBP',
+    categories: [{ name: 'Groceries' }],
+    // Chosen while the step was switched off, and stored anyway: they are what
+    // the review starts from if a key is added in Settings later, and one month
+    // is a far kinder first bill than the deployment-wide default.
+    ai: { months: 1, webSearch: false },
+  });
+  assert.equal(done.status, 200, done.body.error);
+
+  const keys = (await call('/api/keys', undefined, 'GET')).body;
+  assert.equal(keys.lunchflow, true);
+  assert.equal(keys.openai, false, 'nothing was written into the OpenAI column');
+
+  const doc = (await call('/api/rules', undefined, 'GET')).body;
+  assert.equal(doc.aiMonths, 1);
+  assert.equal(doc.aiWebSearch, false);
+  assert.ok(doc.categories.some((c) => c.name === 'Groceries'));
+
+  // The Lunchflow key is still the one thing setup cannot do without.
+  const other = await newAccount('no-lunchflow');
+  const refused = await other('/api/onboarding', { openai: 'oa-key' });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /Lunchflow/);
+});
+
+test('the OpenAI key can be added later, and taken away again', { skip }, async () => {
+  // The review being optional has to work in both directions, or "optional"
+  // only holds until you try it once.
+  const call = await newAccount('key-toggle');
+  assert.equal((await call('/api/onboarding/scan', { lunchflow: 'lf-key' })).status, 200);
+  assert.equal((await call('/api/onboarding', { lunchflow: 'lf-key' })).status, 200);
+  assert.equal((await call('/api/keys', undefined, 'GET')).body.openai, false);
+
+  assert.equal((await call('/api/keys', { openai: 'oa-key' })).status, 200);
+  assert.equal((await call('/api/keys', undefined, 'GET')).body.openai, true);
+
+  assert.equal((await call('/api/keys', { openai: null })).status, 200);
+  const after = (await call('/api/keys', undefined, 'GET')).body;
+  assert.equal(after.openai, false, 'the column is cleared, not filled with an empty string');
+  assert.equal(after.lunchflow, true, 'and the bank connection is untouched');
+
+  // An empty body is still nothing to do, rather than a silent removal.
+  assert.equal((await call('/api/keys', {})).status, 400);
+  assert.equal((await call('/api/keys', { openai: '' })).status, 400);
+});
+
+test('the instance suggests categories once for an account with no key', { skip }, async () => {
+  const call = await newAccount('hosted-suggest');
+  const scan = await call('/api/onboarding/scan', { lunchflow: 'lf-key' });
+  assert.equal(scan.status, 200);
+  assert.equal(scan.body.hostedSuggestion, true, 'offered before it has been used');
+
+  const suggested = await call('/api/onboarding/categories', { lunchflow: 'lf-key' });
+  assert.equal(suggested.status, 200, suggested.body.error);
+  assert.ok(suggested.body.categories.length);
+  assert.equal(suggested.body.hosted, true, 'and it says whose key paid');
+
+  // Someone else's money, so exactly once — reloading setup must not spend it
+  // again.
+  const again = await call('/api/onboarding/categories', { lunchflow: 'lf-key' });
+  assert.equal(again.status, 409);
+  assert.match(again.body.error, /already been used/);
+
+  // And the offer is gone from the step that shows it.
+  const rescan = await call('/api/onboarding/scan', { lunchflow: 'lf-key' });
+  assert.equal(rescan.body.hostedSuggestion, false);
+
+  // It is not recorded as this account's spend: it was not billed to them.
+  assert.equal((await call('/api/onboarding', { lunchflow: 'lf-key' })).status, 200);
+  const usage = (await call('/api/ai-usage', undefined, 'GET')).body;
+  assert.equal(usage.calls, 0);
+  assert.equal(usage.costUsd, 0);
+});
+
+test('a suggestion on the user\'s own key leaves the instance\'s offer alone', { skip }, async () => {
+  const call = await newAccount('own-key-suggest');
+  assert.equal((await call('/api/onboarding/scan', { lunchflow: 'lf-key' })).status, 200);
+
+  const suggested = await call('/api/onboarding/categories', { lunchflow: 'lf-key', openai: 'oa-key' });
+  assert.equal(suggested.status, 200);
+  assert.ok(!suggested.body.hosted, 'their key, their call');
+
+  const rescan = await call('/api/onboarding/scan', { lunchflow: 'lf-key' });
+  assert.equal(rescan.body.hostedSuggestion, true, 'nothing of the instance\'s was consumed');
+});
+
 test('the categories step still works when the scan has been forgotten', { skip }, async () => {
   // Setup left open for half an hour, or a restart between the two steps. The
   // merchant names have to come from somewhere, so it pays for the pull again

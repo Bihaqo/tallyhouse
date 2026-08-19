@@ -13,6 +13,10 @@
 // reported as a scam, which is flagged rather than quietly categorised. Everything is scoped to one user: reviews, spend, and
 // the OpenAI key all belong to the signed-in account. Results are cached in
 // Postgres keyed by (user, transaction id); re-running is explicit (?force=1).
+//
+// One exception, and only one: suggestCategoriesOnHostKey() runs a single
+// category suggestion on the deployment's own key, for an account that finished
+// setup without giving one. No transaction review ever does.
 
 const crypto = require('crypto');
 const rules = require('./rules');
@@ -64,6 +68,23 @@ const PRICE_WEB_SEARCH_PER_1K = Number(process.env.OPENAI_PRICE_WEB_SEARCH) || 1
 // which is what a staging copy wants: real transactions, no duplicated spend on
 // reviews production has already paid for.
 const useMockReviews = () => process.env.MOCK_DATA === '1' || process.env.MOCK_REVIEWS === '1';
+
+/**
+ * The deployment's own OpenAI key, used for exactly one thing: the single
+ * category suggestion offered during setup to an account that has no key of its
+ * own (see suggestCategoriesOnHostKey). Nothing else ever reads it — every
+ * transaction review is billed to the account that asked for it.
+ *
+ * Deliberately not named OPENAI_API_KEY. That name is set in a lot of
+ * environments for unrelated reasons, and an instance must not start paying for
+ * other people's suggestions because a variable it did not set for this happened
+ * to be present. Read per call so it can be added without a restart, and so the
+ * tests can exercise both sides of "is this offered at all".
+ */
+const hostKey = () => (process.env.ONBOARDING_OPENAI_KEY || '').trim();
+// Mock reviews stand in for the model, so a dev instance can walk the whole flow
+// without a key or a bill — the same exemption review() and sweep() make.
+const hostedSuggestionAvailable = () => useMockReviews() || Boolean(hostKey());
 
 // In-flight per (user, tx) so concurrent requests share one call; sweep state
 // per user so one account's sweep doesn't clobber another's progress.
@@ -646,7 +667,10 @@ Rules:
  * the raw suggestions plus token usage; the caller decides what to keep.
  */
 // Deterministic stand-in so onboarding is exercisable without a key or spend.
-function mockSuggestCategories() {
+// `considered` follows the real sample size, since the setup page prints it
+// ("suggested from your N most frequent payees") and a hardcoded 0 made that
+// sentence read as a bug in mock mode.
+function mockSuggestCategories(sampled = 0) {
   return {
     categories: [
       { name: 'Internal transfers', excludeFromSpending: true, tracker: false, autoTransfers: true, reason: 'mock' },
@@ -659,13 +683,15 @@ function mockSuggestCategories() {
       { name: 'Bills & utilities', excludeFromSpending: false, tracker: false, autoTransfers: false, reason: 'mock' },
     ],
     usage: { calls: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, webSearches: 0, functionCalls: 0 },
-    considered: 0,
+    considered: sampled,
   };
 }
 
+const SUGGEST_SAMPLE = 300;
+
 async function suggestCategories({ apiKey, merchants, currency = currencies.DEFAULT }) {
-  if (useMockReviews()) return mockSuggestCategories();
-  const sample = merchants.slice(0, 300);
+  const sample = (merchants || []).slice(0, SUGGEST_SAMPLE);
+  if (useMockReviews()) return mockSuggestCategories(sample.length);
   const input = `Currency: ${currency}
 Distinct merchant names seen on the user's accounts over the last 12 months`
     + ` (${sample.length} of ${merchants.length}), most frequent first:\n`
@@ -675,6 +701,11 @@ Distinct merchant names seen on the user's accounts over the last 12 months`
     model: MODEL,
     instructions: SUGGEST_INSTRUCTIONS,
     input,
+    // One call, with nothing chained off it — so there is no reason for OpenAI
+    // to keep the request, and a good reason not to: it is a list of the places
+    // a household pays. The reviews do need `store` (they follow up with
+    // previous_response_id), which is why this is set here rather than globally.
+    store: false,
     text: { format: { type: 'json_schema', name: 'category_suggestions', strict: true, schema: CATEGORY_SUGGESTION_SCHEMA } },
   };
   if (/^(gpt-5|o\d)/.test(MODEL)) body.reasoning = { effort: REASONING_EFFORT };
@@ -694,6 +725,32 @@ Distinct merchant names seen on the user's accounts over the last 12 months`
     usage,
     considered: sample.length, // what the model actually saw, not what exists
   };
+}
+
+/**
+ * The same suggestion, once, on the instance's key instead of the user's.
+ *
+ * An account can be set up without an OpenAI key at all — the AI review is then
+ * simply off — but that account still starts with no categories, and the one
+ * thing that reads a whole year of somebody's merchant names to propose some is
+ * a model call. This is the offer that fills that gap: one call, paid for by
+ * whoever runs the instance, for people who have not decided whether they want
+ * an OpenAI account yet.
+ *
+ * The key never leaves this module, and how often this may be called is not this
+ * function's business — the caller claims the account's single use first (see
+ * users.claimHostedSuggestion), because that has to be atomic against the
+ * database, not against a promise in one process.
+ */
+async function suggestCategoriesOnHostKey({ merchants, currency } = {}) {
+  const key = hostKey();
+  if (!useMockReviews() && !key) {
+    const err = new Error('ONBOARDING_OPENAI_KEY is not set');
+    err.publicMessage = 'This instance cannot suggest categories for you — add your own OpenAI key instead';
+    err.status = 503;
+    throw err;
+  }
+  return suggestCategories({ apiKey: key, merchants, currency });
 }
 
 /* ---------- mock reviewer (MOCK_DATA mode, no API key) ---------- */
@@ -1101,6 +1158,9 @@ async function importData(userId, { reviews, usage } = {}) {
 module.exports = {
   review,
   suggestCategories,
+  suggestCategoriesOnHostKey,
+  hostedSuggestionAvailable,
+  usesMockReviews: useMockReviews,
   recordUsage: recordReviewUsage,
   reviewBatch,
   sweep,

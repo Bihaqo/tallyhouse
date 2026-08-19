@@ -328,3 +328,44 @@ test('model concurrency is limited per API key, not globally', async () => {
   assert.ok(peakPerKey <= 2, `one key exceeded its limit: ${peakPerKey}`);
   assert.ok(peakOverall > 2, `keys did not overlap: ${peakOverall}`);
 });
+
+// The one call this module ever makes on somebody other than the signed-in
+// user's key. An instance that has not opted in by setting the variable must not
+// make it at all — which is what stops the categories step offering something it
+// cannot deliver.
+test('the hosted category suggestion needs the instance to have opted in', async () => {
+  const gpt = require('../src/gpt');
+  const mockData = process.env.MOCK_DATA;
+  const mockReviews = process.env.MOCK_REVIEWS;
+  const hostKey = process.env.ONBOARDING_OPENAI_KEY;
+  try {
+    // Out of mock mode, where a real call would otherwise be attempted.
+    delete process.env.MOCK_DATA;
+    delete process.env.MOCK_REVIEWS;
+
+    delete process.env.ONBOARDING_OPENAI_KEY;
+    assert.equal(gpt.hostedSuggestionAvailable(), false);
+    await assert.rejects(
+      gpt.suggestCategoriesOnHostKey({ merchants: ['Freshmart'] }),
+      (err) => err.status === 503
+    );
+
+    process.env.ONBOARDING_OPENAI_KEY = 'sk-instance';
+    assert.equal(gpt.hostedSuggestionAvailable(), true);
+  } finally {
+    if (mockData === undefined) delete process.env.MOCK_DATA;
+    else process.env.MOCK_DATA = mockData;
+    if (mockReviews === undefined) delete process.env.MOCK_REVIEWS;
+    else process.env.MOCK_REVIEWS = mockReviews;
+    if (hostKey === undefined) delete process.env.ONBOARDING_OPENAI_KEY;
+    else process.env.ONBOARDING_OPENAI_KEY = hostKey;
+  }
+});
+
+// And mock mode stands in for it, so a dev instance walks the whole setup flow
+// without a key or a bill.
+test('mock reviews stand in for the hosted suggestion', () => {
+  const gpt = require('../src/gpt');
+  assert.equal(process.env.MOCK_DATA, '1', 'this file runs in mock mode');
+  assert.equal(gpt.hostedSuggestionAvailable(), true);
+});

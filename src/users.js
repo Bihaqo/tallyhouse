@@ -183,6 +183,46 @@ async function getKeys(id) {
   return { lunchflow: decrypt(rows[0].lunchflow_key), openai: decrypt(rows[0].openai_key) };
 }
 
+// Whether an account has an OpenAI key on file at all. Asked by /api/me so the
+// app can leave the AI controls off the page entirely for an account that never
+// gave one, rather than offering buttons that answer 503. Reads the null-ness of
+// the column, so nothing is decrypted to find out.
+async function hasOpenAiKey(id) {
+  const { rows } = await db.query('SELECT openai_key IS NOT NULL AS present FROM users WHERE id = $1', [id]);
+  return Boolean(rows.length && rows[0].present);
+}
+
+/* ---------- the one suggestion run on the deployment's key ---------- */
+
+/**
+ * Claim this account's single category suggestion on the instance's own OpenAI
+ * key. Returns true when the claim was this call's.
+ *
+ * A conditional UPDATE rather than a read followed by a write: setup is a page
+ * anyone can reload, and two requests arriving together must not both come back
+ * "not used yet" and spend the operator's money twice. The row itself is the
+ * lock, so this holds across processes as well as across requests.
+ */
+async function claimHostedSuggestion(id) {
+  const { rowCount } = await db.query(
+    'UPDATE users SET hosted_suggest_at = now() WHERE id = $1 AND hosted_suggest_at IS NULL',
+    [id]
+  );
+  return rowCount > 0;
+}
+
+// Hand the claim back when the call it was taken for produced nothing. A failed
+// request bills nobody, so spending someone's one free suggestion on a network
+// hiccup would be a bug, not a policy.
+function releaseHostedSuggestion(id) {
+  return db.query('UPDATE users SET hosted_suggest_at = NULL WHERE id = $1', [id]);
+}
+
+async function hostedSuggestionUsed(id) {
+  const { rows } = await db.query('SELECT hosted_suggest_at FROM users WHERE id = $1', [id]);
+  return Boolean(rows.length && rows[0].hosted_suggest_at);
+}
+
 /**
  * Erase an account. Every table that holds user data declares
  * `REFERENCES users(id) ON DELETE CASCADE`, so removing the row takes the
@@ -228,8 +268,9 @@ async function onboardedWithOpenAiKey() {
 }
 
 module.exports = {
-  upsertByGoogle, upsertByEmail, byId, setKeys, getKeys, markOnboarded, isOnboarded,
+  upsertByGoogle, upsertByEmail, byId, setKeys, getKeys, hasOpenAiKey, markOnboarded, isOnboarded,
   onboardedWithOpenAiKey, deleteAccount,
+  claimHostedSuggestion, releaseHostedSuggestion, hostedSuggestionUsed,
   maxUsers, countUsers, atCapacity, addToWaitlist, waitingCount,
   // exported for tests: the log is this deployment's only cap notification, so
   // the escalation is behaviour worth pinning rather than an implementation detail

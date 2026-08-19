@@ -1143,6 +1143,17 @@ function renderDetailBody() {
 
 const aiReviews = new Map(); // txId -> review object | 'loading' | { error }
 
+/**
+ * Whether this account has the AI review at all — it needs an OpenAI key, and
+ * setup no longer insists on one. Assumed on until /api/me says otherwise, so a
+ * failed or slow answer leaves the app exactly as it was.
+ *
+ * With it off, every AI control is left off the page rather than shown and
+ * disabled: a button whose only possible outcome is "AI review is not
+ * configured" is worse than no button.
+ */
+let aiReview = true;
+
 function aiEligible(tx) {
   return tx.kind === 'spend' && tx.originalAmount < 0 && !tx.returnOf;
 }
@@ -1150,6 +1161,14 @@ function aiEligible(tx) {
 function refreshAiCells(txId) {
   for (const el of document.querySelectorAll('.tx-ai')) {
     if (el.dataset.tx === String(txId) && el._tx) renderAiCell(el, el._tx);
+  }
+}
+
+// Every AI cell on screen, for when the answer to "is the review on?" lands
+// after the rows were drawn.
+function repaintAiCells() {
+  for (const el of document.querySelectorAll('.tx-ai')) {
+    if (el._tx) renderAiCell(el, el._tx);
   }
 }
 
@@ -1188,6 +1207,7 @@ function renderAiCell(el, tx) {
   el.textContent = '';
   el.dataset.tx = tx.id;
   el._tx = tx;
+  if (!aiReview) return; // no OpenAI key on this account: the column stays empty
   if (!aiEligible(tx)) return; // income/transfer/etc.: no AI, manual controls handled separately
 
   const r = aiReviews.get(String(tx.id));
@@ -1381,14 +1401,21 @@ function renderOutliers({ recent, byMerchant, reviewedCount, flaggedCount }) {
   const card = $('outliers-card');
   const list = $('outliers-list');
   list.textContent = '';
-  card.hidden = false; // always visible, so an empty inbox is a statement, not a mystery
+  // Visible whenever there is a review to have, so an empty inbox is a
+  // statement rather than a mystery — but an account with no OpenAI key and no
+  // reviews behind it (an import can bring some) is not being told anything by
+  // an inbox for a feature it does not have.
+  card.hidden = !aiReview && !reviewedCount;
+  if (card.hidden) return;
   if (!byMerchant.length) {
     const empty = document.createElement('p');
     empty.className = 'tx-search-status';
     empty.textContent = reviewedCount
       ? `Nothing to review — GPT has looked at ${reviewedCount} transaction${reviewedCount === 1 ? '' : 's'}`
         + (flaggedCount ? ` (all ${flaggedCount} flagged outlier${flaggedCount === 1 ? '' : 's'} already reviewed).` : ' and flagged none.')
-      : 'No AI reviews yet — they run automatically when the page loads (needs your OpenAI key in Settings).';
+      // The card is not rendered at all without a review to run, so this is
+      // always "on, but nothing has come back yet".
+      : 'No AI reviews yet — they run automatically when the page loads.';
     list.appendChild(empty);
     return;
   }
@@ -1691,22 +1718,56 @@ async function renderSettings() {
   renderAccount();
 }
 
+/**
+ * Who is signed in, and whether the AI review is switched on for them. Called at
+ * boot and again whenever a key is saved, since adding an OpenAI key is what
+ * turns the review on — the page should not need reloading to notice.
+ */
+async function loadMe() {
+  try {
+    const res = await fetch('/api/me');
+    if (!res.ok) return null;
+    const me = await res.json();
+    const was = aiReview;
+    aiReview = me.aiReview !== false;
+    if (aiReview !== was) repaintAiCells();
+    syncAiCards();
+    return me;
+  } catch (_err) {
+    return null; // the app works either way; the AI controls just stay as they are
+  }
+}
+
+// The two settings cards that only mean something with a key: the spend total
+// (which would be a column of zeros) and the review settings, which are still
+// worth showing — they are what the review starts from the day a key is added.
+function syncAiCards() {
+  $('ai-usage-card').hidden = !aiReview;
+  $('ai-review-off').hidden = aiReview;
+  // A per-transaction price for reviews that are not running reads as a charge
+  // somebody is paying. The note above it already says what the state is.
+  $('ai-settings-estimate').hidden = !aiReview;
+}
+
 // Whose account the destructive buttons below act on — worth stating plainly
 // next to a delete button, especially with more than one Google account around.
 async function renderAccount() {
-  try {
-    const res = await fetch('/api/me');
-    if (!res.ok) return;
-    const me = await res.json();
-    $('account-email').textContent = me.email || 'this account';
-    // Only operators get told the panel is there; for everyone else the link
-    // stays hidden and /admin answers 404 anyway.
-    $('admin-link').hidden = !me.admin;
-  } catch (_err) { /* the buttons work regardless of who we say you are */ }
+  const me = await loadMe();
+  if (!me) return; // the buttons work regardless of who we say you are
+  $('account-email').textContent = me.email || 'this account';
+  // Only operators get told the panel is there; for everyone else the link
+  // stays hidden and /admin answers 404 anyway.
+  $('admin-link').hidden = !me.admin;
 }
 
-// Show which keys are on file (never the values) and clear any stale input.
-async function renderApiKeys() {
+/**
+ * Show which keys are on file (never the values) and clear any stale input.
+ *
+ * `keepStatus` is for the calls that follow a save or a removal: those have just
+ * written the outcome into the same line, and wiping it a moment later left the
+ * card looking like nothing had happened.
+ */
+async function renderApiKeys({ keepStatus = false } = {}) {
   try {
     const res = await fetch('/api/keys');
     if (!res.ok) return;
@@ -1716,7 +1777,8 @@ async function renderApiKeys() {
       input.value = '';
       input.placeholder = present ? '•••• stored — enter to replace' : 'not set';
     }
-    $('keys-status').textContent = '';
+    $('key-openai-clear').hidden = !k.openai;
+    if (!keepStatus) $('keys-status').textContent = '';
   } catch (_err) { /* keys card is best-effort */ }
 }
 
@@ -1743,11 +1805,46 @@ async function saveKeys() {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Update failed (${res.status})`);
     status.textContent = 'Updated ✓';
-    renderApiKeys();
+    renderApiKeys({ keepStatus: true });
+    // An OpenAI key added here switches the review on; the page should show that
+    // straight away rather than at the next reload.
+    loadMe().then(() => {
+      if (aiReview) startAiSweep();
+    });
   } catch (err) {
     status.textContent = err.message;
   } finally {
     $('keys-save').disabled = false;
+  }
+}
+
+/**
+ * Take the OpenAI key off the account, switching the AI review off. Confirmed,
+ * because it is the only key operation that cannot be undone by retyping what
+ * you had — but not destructive: reviews already paid for stay where they are.
+ */
+async function clearOpenAiKey() {
+  if (!confirm('Remove your OpenAI key?\n\nThe AI review stops: no new reviews, no outlier '
+    + 'flagging, and nothing more sent to a model. Reviews you have already paid for are kept, and '
+    + 'adding a key again switches it back on.')) return;
+  const status = $('keys-status');
+  $('key-openai-clear').disabled = true;
+  status.textContent = 'Removing…';
+  try {
+    const res = await fetch('/api/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openai: null }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Removal failed (${res.status})`);
+    status.textContent = 'Removed ✓';
+    renderApiKeys({ keepStatus: true });
+    loadMe();
+  } catch (err) {
+    status.textContent = err.message;
+  } finally {
+    $('key-openai-clear').disabled = false;
   }
 }
 
@@ -2244,6 +2341,7 @@ $('delete-confirm').addEventListener('input', syncDeleteDialog);
 $('delete-apply').addEventListener('click', deleteAccount);
 $('delete-cancel').addEventListener('click', () => $('delete-modal').close());
 $('keys-save').addEventListener('click', saveKeys);
+$('key-openai-clear').addEventListener('click', clearOpenAiKey);
 $('rule-apply').addEventListener('click', applyRuleFromModal);
 $('rule-cancel').addEventListener('click', () => $('rule-modal').close());
 $('rule-pattern').addEventListener('input', scheduleRulePreview);
@@ -2265,4 +2363,9 @@ Chart.defaults.font.size = 12;
 
 load().then(route);
 fetchRulesDoc().catch(() => {}); // warm the category list for the AI dropdowns
-startAiSweep(); // review anything not yet cached, in the background
+// Who we are first, because it says whether there is an AI review to start at
+// all — an account with no OpenAI key should not fire a request whose only
+// answer is 503.
+loadMe().then(() => {
+  if (aiReview) startAiSweep(); // review anything not yet cached, in the background
+});

@@ -143,11 +143,16 @@
       <section class="card" id="api-keys-card">
         <h2>API keys</h2>
         <p class="sub">Your Lunchflow and OpenAI keys, encrypted at rest. Leave a field blank to keep the
-          current key; enter a new value to rotate it.</p>
+          current key; enter a new value to rotate it. The OpenAI key is optional — without it the AI
+          review is simply off, and adding one here switches it on.</p>
         <label class="settings-currency">Lunchflow <input id="key-lunchflow" type="password" spellcheck="false" placeholder="•••• stored"></label>
         <label class="settings-currency">OpenAI <input id="key-openai" type="password" spellcheck="false" placeholder="•••• stored"></label>
         <div class="settings-actions">
           <button class="primary" id="keys-save">Update keys</button>
+          <!-- Only shown while there is one to remove. Switching the review off
+               has to be as available as switching it on, or "optional" only
+               means "optional until you try it". -->
+          <button id="key-openai-clear" hidden>Remove OpenAI key</button>
           <span class="tx-search-status" id="keys-status"></span>
         </div>
       </section>
@@ -162,6 +167,13 @@
            categories, since it lives in the same document. -->
       <section class="card" id="ai-settings-card">
         <h2>AI review</h2>
+        <!-- Shown only while there is no OpenAI key on the account. The settings
+             below it still save, and are what the review starts from on the day
+             a key is added — so the card stays rather than disappearing. -->
+        <p class="sub settings-warn" id="ai-review-off" hidden>The AI review is <strong>off</strong>: there is
+          no OpenAI key on this account. Nothing is sent to a model and nothing is billed. Add a key
+          under <strong>API keys</strong> above to switch it on — these settings are what it will
+          start from.</p>
         <p class="sub" id="ai-settings-note">Every transaction in the window below is reviewed once and
           the result is cached, so the cost is paid once per transaction. New transactions are reviewed
           as they arrive, whatever the window says.</p>

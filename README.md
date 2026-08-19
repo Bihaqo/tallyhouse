@@ -14,7 +14,7 @@ tracked, nothing is sold, and access to your bank is read-only.
   there is no separate registration, and "Sign in" reads as members-only to
   exactly the people who do not have an account yet. That page is also the pitch —
   what the app does, a sketch of the dashboard, and what setup will ask of you
-  (two API keys, one of them paid) before you commit to anything. Sessions are
+  (one API key, plus an optional second one) before you commit to anything. Sessions are
   cookie-based (stored in Postgres) and the sign-in endpoints are rate-limited.
   `/about`, `/privacy` and `/terms` are public pages.
 - **Setup in three steps**, in the order the answers become knowable:
@@ -29,8 +29,18 @@ tracked, nothing is sold, and access to your bank is read-only.
      that follows both**, computed against the transactions step 1 just found.
      This is the point of the split: what the review costs is the one thing a new
      user cannot guess, and by now the app knows what it would be spread over.
+     **The key is optional**: leave it blank and the whole step switches off —
+     no review, nothing sent to a model, nothing billed — with the settings
+     still stored, so adding a key in **Settings → API keys** later starts from
+     the modest window setup offered rather than the deployment-wide default.
   3. **Categories** — the list inferred from their own merchant names by a single
      model call, editable in place: rename, retick the flags, remove, add.
+     Someone who gave no OpenAI key is *asked* here instead: the instance offers
+     to run that one call on its own key (`ONBOARDING_OPENAI_KEY`), once per
+     account, and says exactly what it sends — payee names only, no amounts,
+     dates or account details, with `store: false` so the request is not kept in
+     that account. Declining leaves the list to be typed by hand, here or in
+     Settings.
 
   The scan from step 1 is held in process for half an hour so neither later step
   re-pulls the bank. Each key field has a **?** that expands to say what the
@@ -106,7 +116,13 @@ tracked, nothing is sold, and access to your bank is read-only.
   substring against merchant + description; a `=` prefix means exact match, and a
   trailing space means whole words only (`"pub "` matches neither `"public"` nor
   the `"pub"` inside another word).
-- **AI classification review** — billed to each user's own OpenAI key, GPT reviews
+- **AI classification review, or none at all** — the review needs an OpenAI key,
+  and an account is allowed not to have one. Without it the app is the dashboard,
+  the rules and the manual classification: no sweep, no per-row verdicts, no
+  outlier inbox, nothing sent to a model, and the AI controls are left off the
+  page rather than shown and disabled. `/api/me` reports `aiReview`, which is
+  what the client switches on; adding a key in **Settings → API keys** turns it
+  on without a reload. With a key, and billed to it, GPT reviews
   transactions one at a time: for an "Other" transaction it suggests a category (shown
   as a one-click **→ Category** button on the row); for a classified one it says whether
   the category looks right; it can propose a keyword rule (the **+ rule** button opens a
@@ -173,6 +189,8 @@ tracked, nothing is sold, and access to your bank is read-only.
 ## Environment variables
 
 Lunchflow and OpenAI keys are **per-user** now — entered at onboarding, not via env.
+The one exception is `ONBOARDING_OPENAI_KEY` below, which is the instance's own key
+and pays for nothing but the single category suggestion offered during setup.
 
 | Var | Required | Purpose |
 |---|---|---|
@@ -191,6 +209,7 @@ Lunchflow and OpenAI keys are **per-user** now — entered at onboarding, not vi
 | `CACHE_TTL_MINUTES` | no | How long a Lunchflow pull counts as fresh, default 15 minutes |
 | `STALE_SERVE_MINUTES` | no | How far past the TTL a cached pull is still served straight back while it refreshes behind the request, default 60 minutes. `0` makes every expired request wait for fresh data |
 | `FX_API_URL` | no | Alternative endpoint compatible with Frankfurter's v2 rates API |
+| `ONBOARDING_OPENAI_KEY` | no | **Your** OpenAI key, used for one thing only: proposing a starting category list for an account that finished setup without a key of its own. One call per account, ever (claimed by a conditional UPDATE on `users.hosted_suggest_at`, so a reload cannot spend it twice), asked for rather than assumed, sent with `store: false`, and deliberately **not** added to that account's "AI review spend" — it is not their bill. Unset means the offer is not made at all; it is intentionally not `OPENAI_API_KEY`, so an instance cannot start paying for this because of a variable it set for something else |
 | `OPENAI_MODEL` | no | Model for reviews, default `gpt-5.4-mini` |
 | `OPENAI_BASE_URL` | no | Alternative OpenAI-compatible endpoint |
 | `OPENAI_REASONING_EFFORT` | no | `low` (default) / `medium` / `high` — low keeps reviews fast and cheap |
@@ -301,7 +320,8 @@ restart policy), so Railway needs no build config — just the env vars.
    enforces the auth/config checks. Don't set `PORT` or `DATABASE_URL`; Railway
    provides both.
 5. **Get a URL:** service → **Settings → Networking → Generate Domain**. Open the
-   HTTPS URL, sign in with Google, and enter your Lunchflow + OpenAI keys at onboarding.
+   HTTPS URL, sign in with Google, and enter your Lunchflow key (and, if you want the
+   AI review, an OpenAI key) at onboarding.
 
 Everything is persisted in Postgres, so data and logins survive deploys with no
 volume to configure. Each user's transactions are cached for 15 minutes; the

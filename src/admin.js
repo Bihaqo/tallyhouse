@@ -101,10 +101,12 @@ async function signupsByMonth(q = db) {
  * written together — so there is no partial state to read and no way to tell a
  * user who abandoned the key form from one who never opened it. Signed in →
  * finished setup is therefore a single step, and it is the big one: everyone
- * who bounces off the Lunchflow and OpenAI key requirement is in that gap.
+ * who bounces off the Lunchflow key requirement is in that gap.
  *
  * The two steps after it are largely the background sweep proving the keys
  * work, not the person doing anything, which is what the panel labels them as.
+ * "AI reviews ran" is also now a real choice rather than a consequence: an
+ * account can finish setup with no OpenAI key, and never appear on that row.
  */
 async function setupFunnel(q = db) {
   const { rows } = await q.query(`
@@ -130,9 +132,9 @@ async function setupFunnel(q = db) {
   const f = rows[0];
   return [
     { step: 'Signed in', count: f.signedIn, note: 'a Google account exists' },
-    { step: 'Finished setup', count: f.onboarded, note: 'both API keys accepted' },
+    { step: 'Finished setup', count: f.onboarded, note: 'Lunchflow key accepted' },
     { step: 'Data pulled', count: f.dataPulled, note: 'Lunchflow returned transactions' },
-    { step: 'AI reviews ran', count: f.reviewed, note: 'mostly the background sweep' },
+    { step: 'AI reviews ran', count: f.reviewed, note: 'needs an OpenAI key; mostly the sweep' },
     { step: 'Signed in again', count: returned[0].n, note: 'a day or more after setup' },
   ];
 }

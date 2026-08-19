@@ -336,10 +336,20 @@ app.post('/api/logout', (req, res) => {
 
 /* ---------- onboarding & account ---------- */
 
-app.get('/api/me', requireAuth, (req, res) => {
+app.get('/api/me', requireAuth, async (req, res) => {
+  // Whether this account has an OpenAI key, so the app can leave the AI
+  // controls off the page rather than offering buttons that answer 503. An
+  // account can finish setup without one; Settings switches it on later.
+  let aiReview = gpt.usesMockReviews();
+  if (!aiReview) {
+    try {
+      aiReview = await users.hasOpenAiKey(uid(req));
+    } catch (_err) { /* the rest of this answer is still worth sending */ }
+  }
   res.json({
     email: req.session.email,
     onboarded: Boolean(req.session.onboarded),
+    aiReview,
     // Only so the app can show the link. The panel guards itself.
     admin: isAdmin(req),
   });
@@ -503,6 +513,12 @@ app.post('/api/onboarding/scan', requireAuth, keyLimiter, async (req, res) => {
       // The per-review halves, so the estimate on the next step can follow the
       // months field and the web-search box without a round trip each keystroke.
       cost: gpt.costBasis(),
+      // Whether the categories step may offer to propose a list on this
+      // instance's key, for someone setting up without an OpenAI key of their
+      // own. False when the instance has no key for it, and false once this
+      // account has had its one.
+      hostedSuggestion: gpt.hostedSuggestionAvailable()
+        && !(await users.hostedSuggestionUsed(uid(req))),
     });
   } catch (err) {
     console.error('Account scan failed:', err.message);
@@ -513,10 +529,16 @@ app.post('/api/onboarding/scan', requireAuth, keyLimiter, async (req, res) => {
 /**
  * Propose a starting category list from the user's own transactions.
  *
- * One model call, on the OpenAI key they have just typed in, using the merchant
- * names the scan step already pulled. A new account ships with no keyword
- * patterns (they are personal data, so none are committed to this repo), which
- * would otherwise leave the first dashboard as a single "Other" wedge.
+ * One model call, using the merchant names the scan step already pulled. A new
+ * account ships with no keyword patterns (they are personal data, so none are
+ * committed to this repo), which would otherwise leave the first dashboard as a
+ * single "Other" wedge.
+ *
+ * Whose key pays depends on what setup was given. With an OpenAI key, it is
+ * theirs and the spend joins their running total. Without one — which is now a
+ * way to finish setup, with the AI review simply off — the instance offers its
+ * own key for this one call, once per account, and the user is asked first: the
+ * request is a list of the places they pay, and it is not their bill.
  *
  * Names and flags only. A wrong category name costs a rename; a wrong keyword
  * pattern silently moves real money into the wrong total, so patterns stay with
@@ -524,13 +546,22 @@ app.post('/api/onboarding/scan', requireAuth, keyLimiter, async (req, res) => {
  */
 app.post('/api/onboarding/categories', requireAuth, keyLimiter, async (req, res) => {
   const { lunchflow: lfKey, openai: oaKey } = req.body || {};
-  if (typeof lfKey !== 'string' || !lfKey.trim() || typeof oaKey !== 'string' || !oaKey.trim()) {
-    return res.status(400).json({ error: 'Both API keys are required' });
+  const ownKey = typeof oaKey === 'string' && oaKey.trim() ? oaKey.trim() : null;
+  if (typeof lfKey !== 'string' || !lfKey.trim()) {
+    return res.status(400).json({ error: 'Your Lunchflow API key is required' });
+  }
+  if (!ownKey && !gpt.hostedSuggestionAvailable()) {
+    return res.status(503).json({
+      error: 'This instance cannot suggest categories without a key — add your own OpenAI key, or '
+        + 'create your categories by hand',
+    });
   }
   try {
     // The Lunchflow key was checked by the scan step; only the new one needs it.
-    const invalid = await validateKeys({ openai: oaKey.trim() });
-    if (invalid) return res.status(400).json({ error: invalid });
+    if (ownKey) {
+      const invalid = await validateKeys({ openai: ownKey });
+      if (invalid) return res.status(400).json({ error: invalid });
+    }
 
     let scan = recallScan(uid(req));
     if (!scan) {
@@ -543,18 +574,47 @@ app.post('/api/onboarding/categories', requireAuth, keyLimiter, async (req, res)
     if (!merchants.length) {
       return res.json({ categories: [], currency, note: 'No transactions found to base categories on.' });
     }
-    const suggestion = await gpt.suggestCategories({
-      apiKey: oaKey.trim(), merchants, currency: currency || currencies.DEFAULT,
-    });
-    // This spends the user's own OpenAI money, so it belongs in the running
-    // total shown in Settings — but it is not a transaction review, so it must
-    // not inflate the review count or the per-review average.
-    await gpt.recordUsage(uid(req), suggestion.usage, { countsAsReview: false });
+
+    let suggestion;
+    if (ownKey) {
+      suggestion = await gpt.suggestCategories({
+        apiKey: ownKey, merchants, currency: currency || currencies.DEFAULT,
+      });
+      // This spends the user's own OpenAI money, so it belongs in the running
+      // total shown in Settings — but it is not a transaction review, so it must
+      // not inflate the review count or the per-review average.
+      await gpt.recordUsage(uid(req), suggestion.usage, { countsAsReview: false });
+    } else {
+      // Claimed before the call, not after: setup is a page anyone can reload,
+      // and the claim is what stops one account spending the operator's money
+      // more than once.
+      if (!(await users.claimHostedSuggestion(uid(req)))) {
+        return res.status(409).json({
+          error: 'The one suggestion this instance runs for you has already been used on this '
+            + 'account — add your own OpenAI key to run it again, or add categories by hand',
+        });
+      }
+      try {
+        suggestion = await gpt.suggestCategoriesOnHostKey({
+          merchants, currency: currency || currencies.DEFAULT,
+        });
+      } catch (err) {
+        // A call that produced nothing billed nobody, so it must not cost the
+        // user their one go.
+        await users.releaseHostedSuggestion(uid(req)).catch(() => {});
+        throw err;
+      }
+      // Deliberately not passed to gpt.recordUsage: "AI review spend" is what
+      // this account has been billed for, and this was not billed to them. It is
+      // logged instead, so whoever pays for it can see it happening.
+      console.log(`Category suggestion run on the instance key for user ${uid(req)}`);
+    }
     res.json({
       categories: suggestion.categories,
       currency,
       merchantsConsidered: suggestion.considered,
       merchantsTotal: merchants.length,
+      hosted: !ownKey, // whose key paid, so the page can say so and not offer twice
     });
   } catch (err) {
     console.error('Category suggestion failed:', err.message);
@@ -585,19 +645,34 @@ function parseAiSettings(ai) {
   return { settings };
 }
 
-// Finish onboarding: store both keys (validated), apply the AI settings and
-// optionally import a data export, then mark the account ready.
+/**
+ * Finish onboarding: store the keys (validated), apply the AI settings and
+ * optionally import a data export, then mark the account ready.
+ *
+ * Only the Lunchflow key is required. An account can be set up without an OpenAI
+ * key, which leaves the AI review off — no sweep, no per-row verdicts, no spend
+ * — and adding one in Settings later switches it on. The AI settings are stored
+ * either way, so switching it on then starts from the modest window setup
+ * offered rather than the deployment-wide default.
+ */
 app.post('/api/onboarding', requireAuth, keyLimiter, async (req, res) => {
   const { lunchflow: lfKey, openai: oaKey, data, categories, currency, ai } = req.body || {};
-  if (typeof lfKey !== 'string' || !lfKey.trim() || typeof oaKey !== 'string' || !oaKey.trim()) {
-    return res.status(400).json({ error: 'Both API keys are required' });
+  if (typeof lfKey !== 'string' || !lfKey.trim()) {
+    return res.status(400).json({ error: 'Your Lunchflow API key is required' });
   }
+  const openai = typeof oaKey === 'string' && oaKey.trim() ? oaKey.trim() : null;
   const { settings: aiSettings, error: aiError } = parseAiSettings(ai);
   if (aiError) return res.status(400).json({ error: aiError });
   try {
-    const invalid = await validateKeys({ lunchflow: lfKey.trim(), openai: oaKey.trim() });
+    const invalid = await validateKeys({
+      lunchflow: lfKey.trim(),
+      ...(openai ? { openai } : {}),
+    });
     if (invalid) return res.status(400).json({ error: invalid });
-    await users.setKeys(uid(req), { lunchflow: lfKey.trim(), openai: oaKey.trim() });
+    // Only the keys that were given: an absent OpenAI key leaves the column
+    // null rather than writing an empty one, which is what everything
+    // downstream tests for.
+    await users.setKeys(uid(req), { lunchflow: lfKey.trim(), ...(openai ? { openai } : {}) });
     if (data != null) await applyImport(uid(req), data);
     // The categories the user ticked on the suggestion list, and the currency
     // they confirmed. An import brings its own rules, so it wins and those two
@@ -628,14 +703,27 @@ app.get('/api/keys', requireOnboarded, async (req, res) => {
   res.json({ lunchflow: Boolean(keys.lunchflow), openai: Boolean(keys.openai) });
 });
 
-// Rotate one or both keys from settings (validated).
+/**
+ * Rotate keys from settings (validated), or take the OpenAI one off the account.
+ *
+ * An explicit `null` for `openai` removes it, which is what makes the AI review
+ * genuinely optional rather than optional-until-you-try-it: the review, the
+ * sweep and the background scheduler all key off the column being non-null, so
+ * clearing it stops every one of them. Cached reviews are left alone — they are
+ * paid for and they are the user's data. Only the OpenAI key can go; without a
+ * Lunchflow key there is nothing to show at all.
+ */
 app.post('/api/keys', requireOnboarded, keyLimiter, async (req, res) => {
   const patch = {};
   if (typeof req.body?.lunchflow === 'string' && req.body.lunchflow.trim()) patch.lunchflow = req.body.lunchflow.trim();
   if (typeof req.body?.openai === 'string' && req.body.openai.trim()) patch.openai = req.body.openai.trim();
+  else if (req.body?.openai === null) patch.openai = null;
   if (!Object.keys(patch).length) return res.status(400).json({ error: 'Provide a new key to update' });
   try {
-    const invalid = await validateKeys(patch);
+    // A key being removed has nothing to check with the service that issued it.
+    const invalid = await validateKeys(
+      Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== null))
+    );
     if (invalid) return res.status(400).json({ error: invalid });
     await users.setKeys(uid(req), patch);
     res.json({ ok: true });

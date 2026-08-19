@@ -92,17 +92,20 @@
         <p class="onboarding-intro" id="scan-summary"></p>
 
         <div class="label-row">
-          <label for="openai">OpenAI API key</label>
+          <label for="openai">OpenAI API key <span class="optional">(optional)</span></label>
           <button type="button" class="help-icon" aria-expanded="false"
             aria-controls="help-openai" aria-label="Why is an OpenAI key needed?">?</button>
         </div>
-        <input id="openai" name="openai" type="password" spellcheck="false" required />
-        <p class="field-hint">Powers the AI review of transactions. Billed to your own OpenAI account.</p>
+        <input id="openai" name="openai" type="password" spellcheck="false" />
+        <p class="field-hint">Powers the AI review of transactions, billed to your own OpenAI
+          account. Leave it blank to set up without the review — everything else works, and you can
+          switch it on later in Settings.</p>
 
         <div class="help-panel" id="help-openai" hidden>
           <p>The AI review reads one transaction at a time to suggest a category, propose a keyword
-            rule, and flag amounts that look unusual for that merchant. It is also what proposes
-            your starting category list on the next step, so setup needs it.</p>
+            rule, and flag amounts that look unusual for that merchant. Without a key none of that
+            runs: your categories are matched by the keyword rules alone, which you edit in
+            Settings.</p>
           <p><strong>There is no subscription</strong> — OpenAI bills your own account for what you
             use. Reviews are cached, so each transaction is paid for once; after the first pass only
             new transactions cost anything. <strong>Settings → AI usage</strong> keeps a running
@@ -117,6 +120,11 @@
           </ol>
         </div>
 
+        <!-- Everything from here down describes the review, so with no key above
+             it is switched off rather than hidden: what you are turning down is
+             worth seeing, and the fields keep the answers for the day you add a
+             key in Settings. -->
+        <fieldset id="ai-options" class="bare-fieldset">
         <label class="settings-currency" for="ai-months">Review the last
           <input id="ai-months" type="number" min="1" max="24" step="1" value="1" /> months
         </label>
@@ -135,6 +143,7 @@
           and judge from your own data alone.</p>
 
         <div class="cost-estimate" id="ai-estimate"></div>
+        </fieldset>
 
         <button class="primary" id="ai-continue" type="button">Continue</button>
         <button id="ai-back" type="button">← Back</button>
@@ -151,12 +160,29 @@
         <p class="field-hint" id="currency-note"></p>
 
         <h2 class="suggest-title">Categories for your spending</h2>
+
+        <!-- Only for accounts set up without an OpenAI key. Proposing categories
+             means showing a model a year of merchant names, and here that call
+             is on the instance's key rather than the user's — so it is asked
+             for, in the plainest terms available, and never assumed. -->
+        <div class="help-panel" id="suggest-offer" hidden>
+          <p><strong>Want them suggested for you?</strong> Tallyhouse can send your payee names —
+            up to 300 of them, most frequent first — to OpenAI once, and propose a category list
+            from what it sees. Names only: no amounts, no dates, no account details, and nothing
+            about you.</p>
+          <p>This one call runs on <strong>Tallyhouse's own OpenAI key</strong>, so it costs you
+            nothing and needs no OpenAI account. The request is not stored in that account, nothing
+            from it is kept here, and it is offered once per account. Skip it and you can type your
+            own categories below instead — or add them later in Settings.</p>
+          <button id="suggest-run" type="button">Suggest categories from my payees</button>
+        </div>
+
         <p class="field-hint" id="suggest-note"></p>
         <div id="suggest-list" class="suggest-list"></div>
         <button id="suggest-add" type="button">+ Add a category</button>
-        <p class="field-hint">Remove anything you don't want, rename what is not quite right, and add
-          any the suggestions missed. None of them have keyword rules yet: the AI review proposes
-          those one at a time as you go, showing what each would catch before it is applied.</p>
+        <!-- Filled in by the script: how the keyword rules get written depends on
+             whether this account has an AI review to write them. -->
+        <p class="field-hint" id="suggest-rules-note"></p>
         <button class="primary" id="suggest-accept" type="button">Create these and finish</button>
         <button id="suggest-skip" type="button">Skip — start with no categories</button>
       </section>

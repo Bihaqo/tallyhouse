@@ -10,8 +10,18 @@ CREATE TABLE IF NOT EXISTS users (
   lunchflow_key BYTEA,
   openai_key    BYTEA,
   onboarded_at  TIMESTAMPTZ,
+  -- When this account used its one category suggestion run on the deployment's
+  -- own OpenAI key (ONBOARDING_OPENAI_KEY), for accounts that never gave one of
+  -- their own. Null until it does: the column is the whole enforcement of "once
+  -- per account", so somebody else's bill cannot be run up by reloading setup.
+  hosted_suggest_at TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Added to a table that already existed everywhere, so an installation created
+-- before the column gets it on the next boot. Additive and idempotent, like the
+-- CREATE TABLEs above: a rollback simply stops reading it.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hosted_suggest_at TIMESTAMPTZ;
 
 -- One editable rules document per user (same shape as config/settings.json).
 CREATE TABLE IF NOT EXISTS rules (

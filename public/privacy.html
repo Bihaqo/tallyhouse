@@ -23,7 +23,7 @@
         <code>openid email</code> and nothing else — not your name, profile or picture.</p>
       <p><strong>The Lunchflow and OpenAI API keys you enter.</strong> Encrypted (AES-256-GCM)
         before they are written down; the encryption key lives in the server's environment, not in
-        the database.</p>
+        the database. The OpenAI one is optional — see the AI review below.</p>
       <p><strong>A cached copy of your transactions</strong> as Lunchflow returns them: date,
         amount, currency, merchant, description, which account, and the original record.</p>
       <p><strong>What you create here:</strong> your category rules, manual classifications, the AI
@@ -48,11 +48,21 @@
         a setting (<strong>Settings → AI review</strong>, and a tick box during setup); with it off,
         merchant names are never sent to a search engine. This is billed to your own OpenAI key and
         governed by OpenAI's terms, and OpenAI processes it in the United States.</p>
-      <p>In this version the AI review is <strong>not optional</strong>: setup requires an OpenAI
-        key, and a review of your recent transactions starts automatically and then keeps up with new
-        ones. How far back that first pass reaches is up to you — setup asks, one month by default,
-        and Settings can change it afterwards. If you would rather your transaction data were never
-        sent to a model, Tallyhouse is not currently the right tool for you.</p>
+      <p><strong>The AI review is optional.</strong> It runs only if there is an OpenAI key on your
+        account, and setup does not require one. Without a key, nothing about your transactions is
+        ever sent to a model: no review runs, and the rest of the app — the dashboard, the category
+        rules, the manual classification — works exactly the same. Adding a key in
+        <strong>Settings → API keys</strong> switches the review on, at which point a review of your
+        recent transactions starts automatically and then keeps up with new ones; how far back that
+        first pass reaches is your choice, and Settings can change it at any time. Removing that
+        choice again means deleting your account, which the section below covers.</p>
+      <p><strong>One exception, and only if you ask for it.</strong> If you set up without an OpenAI
+        key, the categories step offers to propose a starting category list for you. Accepting sends
+        <em>your payee names alone</em> — up to 300 of them, no amounts, no dates, no account
+        details, nothing identifying you — to OpenAI in a single request, on Tallyhouse's own key
+        rather than yours. It is sent with storage switched off, so it is not retained in that
+        account, and nothing from the request is kept here. It happens once per account and never
+        without the button being pressed; decline it and you can type your categories yourself.</p>
       <p><strong>Frankfurter</strong> supplies historical exchange rates. It is sent a currency code
         and a date, and nothing about you or your transactions.</p>
       <p><strong>Railway</strong> hosts the application and its database.</p>
