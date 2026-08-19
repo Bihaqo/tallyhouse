@@ -1,0 +1,79 @@
+# Checks that the live instance is serving this repo, and records the result on
+# GitHub where anyone can read it.
+#
+# Railway builds from GitHub but reports nothing back to it, so without this the
+# claim "tallyhouse.net runs this code" rests entirely on the operator saying
+# so. Here the claim is tested from outside instead: fetch /version off the
+# public site and compare the commit it names against the commit GitHub just
+# saw pushed. Agreement is recorded as a deployment on the repo's Environments
+# panel, linked to the live URL; disagreement is a failed run with the two
+# commits printed, which is what a site that stopped following main looks like.
+#
+# It runs daily as well as on push because "was deployed once" and "is deployed"
+# are different claims, and only the second is worth anything to a visitor.
+name: Verify deployment
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: verify-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  SITE: https://tallyhouse.net
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the live site to serve this commit
+        run: |
+          set -uo pipefail
+          expected='${{ github.sha }}'
+          echo "Expecting $expected at $SITE/version"
+
+          # Railway builds and swaps over in a couple of minutes on a good day;
+          # a cold build with a queue can take longer, so this waits ~15 min
+          # before calling it a failure. On the scheduled run the site is
+          # already up and the first attempt answers.
+          for attempt in $(seq 1 45); do
+            body=$(curl -fsS --max-time 20 "$SITE/version" || true)
+            live=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            if [ "$live" = "$expected" ]; then
+              echo "$SITE is running $live"
+              exit 0
+            fi
+            echo "attempt $attempt: live=${live:-<none>}"
+            sleep 20
+          done
+
+          echo "::error::$SITE reports ${live:-no commit}, expected $expected"
+          exit 1
+
+      - name: Record the deployment on this repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # auto_merge off and required_contexts empty: this records a
+          # deployment that has already happened and been checked, rather than
+          # requesting one, so GitHub must not gate it on anything or try to
+          # merge the base branch into it.
+          id=$(jq -nc --arg ref "$GITHUB_SHA" --arg site "$SITE" \
+                 '{ref: $ref, environment: "production", production_environment: true,
+                   auto_merge: false, required_contexts: [],
+                   description: ("Verified live at " + $site)}' \
+               | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq '.id')
+          jq -nc --arg site "$SITE" \
+               '{state: "success", environment_url: $site,
+                 description: "/version reports this commit"}' \
+            | gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" --input - --jq '.state'

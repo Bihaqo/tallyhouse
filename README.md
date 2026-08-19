@@ -1,5 +1,12 @@
 # Tallyhouse
 
+[![Verify deployment](https://github.com/Bihaqo/tallyhouse/actions/workflows/verify-deployment.yml/badge.svg)](https://github.com/Bihaqo/tallyhouse/actions/workflows/verify-deployment.yml)
+
+**Live at [tallyhouse.net](https://tallyhouse.net)**, running this repository —
+the footer of every page names the commit it is serving and links it here, and
+the badge above is a check that keeps confirming it. See
+[Verifying the live instance](#verifying-the-live-instance).
+
 Tallyhouse is a multi-user personal finance dashboard backed by the [Lunchflow](https://lunchflow.app) API.
 Each user signs in with Google and brings their own Lunchflow + OpenAI keys; the app
 aggregates their connected accounts and shows where the money went — monthly totals,
@@ -205,6 +212,7 @@ and pays for nothing but the single category suggestion offered during setup.
 | `PGSSL` | no | `disable` to connect to a local Postgres without TLS (in production TLS is used with a relaxed chain) |
 | `PG_POOL_MAX` | no | Maximum Postgres connections in the pool, default 10 |
 | `LUNCHFLOW_BASE_URL` | no | Alternative Lunchflow API base URL |
+| `SOURCE_REPO_URL` | no | Where the footer's commit link points. Defaults to the GitHub repo Railway deployed from, which is the honest answer for a fork; set it for a source Railway can't name (a mirror), or set it **empty** to print the commit without linking it |
 | `PORT` | no | Provided by Railway; defaults to 3000 locally |
 | `CACHE_TTL_MINUTES` | no | How long a Lunchflow pull counts as fresh, default 15 minutes |
 | `STALE_SERVE_MINUTES` | no | How far past the TTL a cached pull is still served straight back while it refreshes behind the request, default 60 minutes. `0` makes every expired request wait for fresh data |
@@ -291,6 +299,59 @@ most recent "Other" transactions (hard-capped at 20 per call), even if cached �
 handy after editing the prompt in [`src/gpt.js`](src/gpt.js). The automatic
 background sweep never re-reviews anything cached, so it costs nothing on
 subsequent page loads once it has been through the backlog.
+
+## Verifying the live instance
+
+[tallyhouse.net](https://tallyhouse.net) is deployed from this repository's
+`main` by Railway, and you shouldn't have to take that on trust. Three things
+make it checkable, from three different directions:
+
+1. **The site says what it is running.** `GET /version` is public and needs no
+   account:
+
+   ```bash
+   curl -s https://tallyhouse.net/version
+   ```
+   ```json
+   {
+     "commit": "6dd042d…",
+     "shortCommit": "6dd042d",
+     "branch": "main",
+     "repoUrl": "https://github.com/Bihaqo/tallyhouse",
+     "commitUrl": "https://github.com/Bihaqo/tallyhouse/commit/6dd042d…",
+     "startedAt": "2026-08-19T21:04:11.000Z"
+   }
+   ```
+
+   Those values come from the `RAILWAY_GIT_*` variables Railway injects into the
+   build, not from anything committed here — so they are the builder's account
+   of what it deployed, they cannot go stale, and a fork deployed by somebody
+   else reports *their* repo rather than this one.
+2. **Every page footer carries it.** The commit appears as `running 6dd042d`,
+   linked to that exact revision on GitHub — one click from the page you are
+   looking at to the code that served it, naming the revision rather than a
+   branch that has moved since.
+3. **A check keeps testing the claim.** Railway builds from GitHub but reports
+   nothing back to it, so
+   [`.github/workflows/verify-deployment.yml`](.github/workflows/verify-deployment.yml)
+   closes the loop from the outside: after every push to `main`, and again once
+   a day, it fetches `/version` off the public site and compares the commit it
+   names against the commit GitHub saw. A match is recorded as a deployment on
+   this repo's **Environments → production** panel, linked to the live URL; a
+   mismatch is a red badge with both commits printed. The daily run is the point
+   of it — "was deployed once" and "is deployed" are different claims, and only
+   the second is worth anything to a visitor.
+
+**What this is not.** A server asserting its own provenance shows which commit
+it claims, not that the running process was built from that tree and nothing
+else; short of reproducible builds and a signed attestation from the builder,
+no hosted web app can prove more than this. What the daily check buys is that
+the claim has to keep being true, and that a deployment which quietly stopped
+following `main` shows up as a failing check rather than as nothing at all.
+
+If you fork this, point `SITE` in that workflow at your own domain (or delete
+the workflow) — otherwise it verifies my deployment on your repo's behalf,
+which will pass and mean nothing.
 
 ## Deploy on Railway
 

@@ -37,6 +37,7 @@ const lunchflow = require('./src/lunchflow');
 const { PgSessionStore } = require('./src/pg-session-store');
 const { buildExport, applyImport } = require('./src/export');
 const sweepScheduler = require('./src/sweep-scheduler');
+const { info: buildInfo } = require('./src/build-info');
 
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -200,6 +201,20 @@ const aiSpendLimiter = rateLimit({
 const uid = (req) => req.session.userId;
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
+
+/**
+ * What source this instance is running, for anyone who wants to check.
+ *
+ * Public and unauthenticated on purpose: it is the answer to "is the site I am
+ * typing my bank key into the code that is published?", which is a question
+ * asked from outside the account, usually before there is one. It says nothing
+ * a reader of the public repo doesn't already have — see src/build-info.js for
+ * what the claim is and isn't worth.
+ */
+app.get('/version', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(buildInfo);
+});
 
 /**
  * Lets the login page decide which controls to show without hardcoding them.
