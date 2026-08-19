@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Tallyhouse</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="admin-page">
+    <header class="admin-head">
+      <div>
+        <h1>Admin</h1>
+        <p class="sub" id="generated"></p>
+      </div>
+      <a class="ai-btn" href="/">Back to the app</a>
+    </header>
+
+    <div class="err" id="err"></div>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card">
+      <h2>Setup funnel</h2>
+      <p class="sub">Where accounts stop. Setup is one request — keys, categories and the finish
+        flag are written together — so there is no half-finished state to read: everyone who
+        bounced off the two-API-key requirement is in the first gap. The last three steps are
+        mostly the hourly background sweep proving the keys still work, not the person doing
+        anything.</p>
+      <div id="funnel"></div>
+    </section>
+
+    <section class="card">
+      <h2>Signups</h2>
+      <p class="sub">Accounts created per month, last twelve.</p>
+      <div id="signups"></div>
+    </section>
+
+    <section class="card">
+      <h2>Use</h2>
+      <p class="sub">Sign-ins are a rolling 30-day window — session rows are deleted once they
+        expire, so anything older is genuinely gone rather than hidden. Manual classifications are
+        the one number here that only a person can cause; AI reviews are mostly the sweep.</p>
+      <section class="tiles" id="use-tiles"></section>
+    </section>
+
+    <section class="card">
+      <h2>Accounts</h2>
+      <p class="sub">Newest first. "Last sign-in" is exactly that, not last activity — see the note
+        at the bottom of this page.</p>
+      <div class="admin-scroll">
+        <table class="txs" id="accounts">
+          <thead>
+            <tr>
+              <th>Email</th><th>Signed up</th><th>Setup</th><th>Last sign-in</th>
+              <th class="col-amount">Sign-ins</th><th class="col-amount">Banks</th>
+              <th class="col-amount">Categories</th><th class="col-amount">Manual</th>
+              <th class="col-amount">Reviews</th><th class="col-amount">AI spend</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>What this panel cannot tell you</h2>
+      <p class="sub">Every number above is read from data the app already had to keep. There is no
+        event log and no page-view record, because the privacy policy says "no analytics, no
+        tracking" and a first-party cookieless one would still be analytics. So:</p>
+      <ul class="admin-limits">
+        <li><strong>Which page someone abandoned</strong> is not recorded anywhere, and no
+          reconstruction of it exists.</li>
+        <li><strong>Last activity</strong> is not available. It looks like it should be —
+          <code>transactions_cache.cached_at</code> updates when the dashboard loads — but the
+          background sweep refreshes it hourly for every onboarded account, so it measures the
+          scheduler. Last sign-in is real, and that is what is shown.</li>
+        <li><strong>Time on site, clicks and navigation order</strong> were never collected.</li>
+      </ul>
+      <p class="sub">Adding any of those means recording behaviour, which would need
+        <a href="/privacy">the privacy policy</a> and the About page reworded first — the claim
+        there is unqualified, and it is not made true by avoiding cookies.</p>
+    </section>
+  </div>
+  <script src="/admin/app.js"></script>
+</body>
+</html>

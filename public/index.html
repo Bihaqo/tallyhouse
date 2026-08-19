@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tallyhouse</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap" id="app">
+    <header class="topbar">
+      <h1>Tallyhouse</h1>
+      <span class="meta" id="meta"></span>
+      <span class="meta" id="ai-progress" title="GPT is reviewing uncached transactions in the background"></span>
+      <span class="spacer"></span>
+      <a class="btn topbar-link" href="/about">About</a>
+      <a class="btn topbar-link" href="/privacy">Privacy</a>
+      <a class="btn topbar-link" href="/terms">Terms</a>
+      <button id="settings-btn">Settings</button>
+      <button id="refresh">Refresh</button>
+      <button id="logout">Log out</button>
+    </header>
+
+    <div id="dashboard">
+    <div class="err" id="err"></div>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card" id="outliers-card" hidden>
+      <h2>Outliers to review</h2>
+      <p class="sub">Transactions GPT flagged as unusual — a surprising amount for the merchant or category, or a possible duplicate. The last 7 days first, then every unreviewed outlier grouped by merchant, largest flagged total first (click a merchant to expand). Mark as reviewed to dismiss.</p>
+      <div id="outliers-list"></div>
+      <div class="settings-actions">
+        <button id="miscat-btn">Review miscategorizations →</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Search transactions</h2>
+      <p class="sub">Search all transactions from the last 12 months.</p>
+      <form class="tx-search" id="global-search-form">
+        <label>Text<input id="global-search-text" type="search" placeholder="Merchant, description, account…"></label>
+        <label>Minimum amount<input id="global-search-min" type="number" min="0" step="0.01" placeholder="0.00"></label>
+        <label>Maximum amount<input id="global-search-max" type="number" min="0" step="0.01" placeholder="Any"></label>
+        <label>Type<select id="global-search-type">
+          <option value="all">All types</option><option value="spend">Spending</option>
+          <option value="income">Income</option><option value="return">Returns</option>
+          <option value="excluded">Excluded</option>
+        </select></label>
+        <div class="tx-search-actions"><button class="primary" type="submit">Search</button><button id="global-search-clear" type="button">Clear</button><button id="global-search-download" type="button" disabled>Download JSON</button></div>
+      </form>
+      <p class="tx-search-status" id="global-search-status">Enter one or more filters to search.</p>
+      <div id="global-search-results"></div>
+    </section>
+
+    <section class="card">
+      <h2>Monthly spending</h2>
+      <!-- Filled in by render() from the actual category flags: a hardcoded list
+           went stale the moment a category was reconfigured. -->
+      <p class="sub" id="monthly-sub"></p>
+      <div class="chart-box tall"><canvas id="monthly-chart"></canvas></div>
+    </section>
+
+    <section class="card" id="income-card" hidden>
+      <h2>Income and what's left</h2>
+      <p class="sub" id="income-sub"></p>
+      <div class="chart-box tall"><canvas id="income-chart"></canvas></div>
+      <table class="cats" id="income-table"></table>
+    </section>
+
+    <section class="card">
+      <h2>Spending by category</h2>
+      <p class="sub" id="cats-sub"></p>
+      <div class="grid-2">
+        <div>
+          <h2 style="text-align:center; font-size:13.5px; color:var(--text-secondary)">This month</h2>
+          <div class="chart-box donut"><canvas id="pie-month"></canvas></div>
+        </div>
+        <div>
+          <h2 style="text-align:center; font-size:13.5px; color:var(--text-secondary)">Monthly average (last 12 months)</h2>
+          <div class="chart-box donut"><canvas id="pie-avg"></canvas></div>
+        </div>
+      </div>
+      <div class="legend" id="cat-legend"></div>
+      <table class="cats" id="cat-table"></table>
+    </section>
+
+    <!-- One section per category flagged as a tracker, built by renderTrackers(). -->
+    <div id="trackers"></div>
+    </div><!-- /#dashboard -->
+
+    <section id="detail" hidden>
+      <div class="detail-head">
+        <button id="detail-back">← Dashboard</button>
+        <h2 id="detail-title"></h2>
+        <span class="meta" id="detail-sub"></span>
+      </div>
+      <div class="err" id="detail-err"></div>
+
+      <section class="card" id="detail-pie-card">
+        <h2 id="detail-pie-title">Spending by category</h2>
+        <p class="sub" id="detail-pie-sub">Click a slice to filter the transactions below.</p>
+        <div class="chart-box donut"><canvas id="detail-pie"></canvas></div>
+        <div class="legend" id="detail-legend"></div>
+      </section>
+
+      <section class="card" id="detail-providers-card" hidden>
+        <h2 id="detail-providers-title"></h2>
+        <p class="sub">Grouped by merchant — monthly average over the last 12 months.</p>
+        <table class="cats" id="detail-providers-table"></table>
+      </section>
+
+      <section class="card">
+        <div class="detail-list-head">
+          <h2 id="detail-list-title">Transactions</h2>
+          <span class="filter-chip" id="detail-filter" hidden></span>
+        </div>
+        <form class="tx-search compact" id="detail-search-form">
+          <label>Text<input id="detail-search-text" type="search" placeholder="Merchant, description, account…"></label>
+          <label>Min amount<input id="detail-search-min" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label>Max amount<input id="detail-search-max" type="number" min="0" step="0.01" placeholder="Any"></label>
+          <label>Type<select id="detail-search-type">
+            <option value="all">All types</option><option value="spend">Spending</option>
+            <option value="income">Income</option><option value="return">Returns</option>
+            <option value="excluded">Excluded</option>
+          </select></label>
+          <div class="tx-search-actions"><button class="primary" type="submit">Filter</button><button id="detail-search-clear" type="button">Clear</button><button id="detail-search-download" type="button" disabled>Download JSON</button></div>
+        </form>
+        <div id="detail-list"></div>
+      </section>
+    </section>
+
+    <section id="settings" hidden>
+      <div class="detail-head">
+        <button id="settings-back">← Dashboard</button>
+        <h2>Classification rules</h2>
+        <span class="meta">stored as data, editable live</span>
+      </div>
+      <div class="err" id="settings-err"></div>
+      <section class="card" id="api-keys-card">
+        <h2>API keys</h2>
+        <p class="sub">Your Lunchflow and OpenAI keys, encrypted at rest. Leave a field blank to keep the
+          current key; enter a new value to rotate it.</p>
+        <label class="settings-currency">Lunchflow <input id="key-lunchflow" type="password" spellcheck="false" placeholder="•••• stored"></label>
+        <label class="settings-currency">OpenAI <input id="key-openai" type="password" spellcheck="false" placeholder="•••• stored"></label>
+        <div class="settings-actions">
+          <button class="primary" id="keys-save">Update keys</button>
+          <span class="tx-search-status" id="keys-status"></span>
+        </div>
+      </section>
+      <section class="card" id="ai-usage-card">
+        <h2>AI review spend</h2>
+        <p class="sub" id="ai-usage-note"></p>
+        <section class="tiles" id="ai-usage-tiles"></section>
+        <p class="tx-search-status" id="ai-usage-tokens"></p>
+      </section>
+      <!-- What the AI review is allowed to do, and therefore what it costs.
+           Saved with the rest of the settings by the button below the
+           categories, since it lives in the same document. -->
+      <section class="card" id="ai-settings-card">
+        <h2>AI review</h2>
+        <p class="sub" id="ai-settings-note">Every transaction in the window below is reviewed once and
+          the result is cached, so the cost is paid once per transaction. New transactions are reviewed
+          as they arrive, whatever the window says.</p>
+        <label class="settings-currency" title="How far back the automatic review reaches, in whole calendar months including this one. Widening it queues the transactions that are newly in range; narrowing it leaves reviews you have already paid for in place.">
+          Review the last <input id="settings-ai-months" type="number" min="1" max="24" step="1"> months
+        </label>
+        <label class="settings-currency" title="Lets the reviewer look up payees it does not recognise — what sort of business they are, and whether they are widely reported as a scam. It is most of what a review costs, and it sends merchant names to a search engine.">
+          <input id="settings-ai-websearch" type="checkbox"> Look up unfamiliar merchants on the web
+        </label>
+        <label class="settings-currency" title="How many transactions this account reviews at once. The limit is per OpenAI key, so this does not affect anyone else. Reviews are token-bound — past a handful, higher mostly buys rate-limit errors.">
+          Parallel AI reviews <input id="settings-concurrency" type="number" min="1" max="10" step="1">
+        </label>
+        <p class="sub" id="ai-settings-estimate"></p>
+      </section>
+      <section class="card">
+        <h2>How matching works</h2>
+        <p class="sub">A rule is a case-insensitive substring matched against merchant + description.
+          A "=" prefix means exact merchant/description match ("=railway"); spaces are significant ("pub " won't match "public").
+          Precedence is the order of the list below: the first category with a matching pattern wins, so keep narrow
+          categories above broad ones that would also catch them.
+          One pattern per line. Preview shows which existing transactions a rule list matches.</p>
+        <label class="settings-currency" title="What your totals are shown in. Transactions in any other currency are converted into it at the rate on the day they happened.">
+          Currency <select id="settings-currency"></select>
+        </label>
+      </section>
+      <div id="settings-groups"></div>
+      <!-- Saving lives below the rule groups: you edit top-down, so the button
+           is where you finish rather than back up at the top of the page. -->
+      <section class="card" id="settings-save-card">
+        <div class="settings-actions">
+          <button class="primary" id="settings-save">Save all changes</button>
+          <button id="settings-revert">Discard edits</button>
+          <span class="tx-search-status" id="settings-status"></span>
+        </div>
+      </section>
+      <section class="card" id="data-export-card">
+        <h2>Export all data</h2>
+        <p class="sub">Download every rule, manual classification, AI review, cached exchange rate and
+          cached transaction as a single JSON file — a complete snapshot for backup or migrating to a
+          database. Login sessions are not included.</p>
+        <div class="settings-actions">
+          <button class="primary" id="data-export-btn">Export JSON</button>
+          <span class="tx-search-status" id="data-export-status"></span>
+        </div>
+      </section>
+      <section class="card" id="account-card">
+        <h2>Account</h2>
+        <p class="sub">Signed in as <strong id="account-email"></strong>.</p>
+        <div class="settings-actions">
+          <button id="account-logout">Log out</button>
+          <a class="btn" id="admin-link" href="/admin" hidden>Admin</a>
+        </div>
+        <div class="danger-zone">
+          <h3>Delete account</h3>
+          <p class="sub">Permanently erases your account and everything in it. This cannot be undone,
+            and there is no backup on our side — export your data first if you want to keep it.</p>
+          <div class="settings-actions">
+            <button class="danger" id="account-delete">Delete my account…</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <dialog id="rule-modal">
+    <h2>Add classification rule</h2>
+    <p class="sub">Case-insensitive substring of merchant + description. "=" prefix = exact match; spaces are significant.</p>
+    <label>Category<select id="rule-category"></select></label>
+    <label>Pattern<input id="rule-pattern" type="text" spellcheck="false" autocomplete="off"></label>
+    <p class="tx-search-status" id="rule-status"></p>
+    <div id="rule-preview" class="rule-preview"></div>
+    <div class="modal-actions">
+      <button class="primary" id="rule-apply">Add rule</button>
+      <button id="rule-cancel" type="button">Cancel</button>
+    </div>
+  </dialog>
+
+  <!-- Deleting is irreversible and there is no backup, so the dialog makes the
+       export a step you have to take rather than advice you can skim past. -->
+  <dialog id="delete-modal">
+    <h2 class="danger-title">⚠ Delete your account and all data</h2>
+    <p class="delete-lede">This is permanent. The moment you confirm, all of the following is erased
+      from the database and cannot be recovered by you or by us:</p>
+    <ul class="delete-list">
+      <li>Your account and your encrypted Lunchflow and OpenAI keys</li>
+      <li>Every classification rule and category you have built up</li>
+      <li>Every manual classification and exclusion</li>
+      <li>Every cached AI review — re-reviewing costs real money again</li>
+      <li>Your cached transactions and AI spend history</li>
+    </ul>
+    <p class="delete-note">Your Lunchflow and OpenAI accounts themselves are untouched — cancel those
+      with them directly.</p>
+
+    <ol class="delete-steps">
+      <li class="delete-step" id="delete-step-1">
+        <strong>Download your data first.</strong>
+        <p class="sub">A single JSON file with your rules, classifications and AI reviews. Importing
+          it into a new account restores everything but the transactions themselves.</p>
+        <button class="primary" id="delete-export">Download my data</button>
+        <span class="tx-search-status" id="delete-export-status"></span>
+      </li>
+      <li class="delete-step is-locked" id="delete-step-2">
+        <strong>Type <code>DELETE</code> to confirm.</strong>
+        <input id="delete-confirm" type="text" spellcheck="false" autocomplete="off"
+          aria-label="Type DELETE to confirm" disabled />
+      </li>
+    </ol>
+
+    <p class="tx-search-status" id="delete-status"></p>
+    <div class="modal-actions">
+      <button class="danger" id="delete-apply" disabled>Delete everything</button>
+      <button id="delete-cancel" type="button">Cancel, keep my account</button>
+    </div>
+  </dialog>
+
+  <script src="/vendor/chart.umd.js"></script>
+  <script src="/currency.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

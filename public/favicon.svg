@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tallyhouse">
+  <!--
+    Tallyhouse. A house whose interior is a tally of five — the two halves of the
+    name in one mark, and an honest description of the app: counting a household's
+    spending.
+
+    The tally is cut out in the tile colour rather than drawn on top, so as the
+    icon shrinks the cuts close up and it settles into a solid house silhouette
+    instead of a smudge. At 16px you read "house"; at 32px and up you read the
+    tally. Colours are the accent pair from style.css, one per theme.
+  -->
+  <style>
+    .tile { fill: #2a78d6; }
+    .cut  { fill: #2a78d6; }
+    .cut-stroke { stroke: #2a78d6; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #3987e5; }
+      .cut  { fill: #3987e5; }
+      .cut-stroke { stroke: #3987e5; }
+    }
+  </style>
+
+  <rect class="tile" width="32" height="32" rx="7"/>
+
+  <!-- Filled and stroked with the same colour so the corners round off. -->
+  <path d="M16 4.6 L26.4 13.6 L26.4 27.4 L5.6 27.4 L5.6 13.6 Z"
+        fill="#ffffff" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/>
+
+  <g class="cut">
+    <rect x="9.6" y="16.6" width="2" height="7.8" rx="0.6"/>
+    <rect x="13.2" y="16.6" width="2" height="7.8" rx="0.6"/>
+    <rect x="16.8" y="16.6" width="2" height="7.8" rx="0.6"/>
+    <rect x="20.4" y="16.6" width="2" height="7.8" rx="0.6"/>
+    <!-- Kept inside the bars' vertical band (16.6–24.4) with only a small
+         horizontal overhang. Steeper than this and the cap collides with the
+         fourth bar, which reads as a blob rather than a struck-through five. -->
+    <path class="cut-stroke" d="M8.9 22.9 L23.1 18.1"
+          fill="none" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

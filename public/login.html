@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tallyhouse — see where your money actually goes</title>
+  <meta name="description" content="A personal spending dashboard: connect your banks and brokerages, sort every transaction with rules you control, and see month by month where the money went." />
+  <!-- So a shared link says what this is before anyone opens it. -->
+  <meta property="og:title" content="Tallyhouse" />
+  <meta property="og:description" content="See where your money actually goes — every account, every month, sorted by rules you control." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card landing-card">
+      <div class="landing-head">
+        <img class="landing-mark" src="/favicon.svg" alt="" width="34" height="34" />
+        <div>
+          <h1 class="landing-title">Tallyhouse</h1>
+          <p class="landing-tagline">See where your money actually goes.</p>
+        </div>
+      </div>
+
+      <!-- A sketch of the thing itself, because "personal spending dashboard"
+           means very little until you have seen one. Inline SVG rather than an
+           image: it costs no request and follows the theme like everything else. -->
+      <svg class="landing-preview" viewBox="0 0 320 118" role="img"
+        aria-label="Sketch of the dashboard: a bar per month, and a donut splitting one month across categories.">
+        <g class="preview-bars">
+          <rect x="6" y="40" width="18" height="44" rx="3" />
+          <rect x="32" y="26" width="18" height="58" rx="3" />
+          <rect x="58" y="48" width="18" height="36" rx="3" />
+          <rect x="84" y="18" width="18" height="66" rx="3" />
+          <rect x="110" y="34" width="18" height="50" rx="3" />
+          <rect class="is-current" x="136" y="14" width="18" height="70" rx="3" />
+        </g>
+        <line class="preview-axis" x1="4" y1="85" x2="158" y2="85" />
+        <g class="preview-label">
+          <text x="15" y="97">Apr</text>
+          <text x="41" y="97">May</text>
+          <text x="67" y="97">Jun</text>
+          <text x="93" y="97">Jul</text>
+          <text x="119" y="97">Aug</text>
+          <text x="145" y="97">Sep</text>
+        </g>
+
+        <g class="preview-donut" transform="rotate(-90 252 42)">
+          <circle cx="252" cy="42" r="24" stroke-dasharray="60.3 90.5" stroke-dashoffset="0" />
+          <circle cx="252" cy="42" r="24" stroke-dasharray="37.7 113.1" stroke-dashoffset="-60.3" />
+          <circle cx="252" cy="42" r="24" stroke-dasharray="30.2 120.6" stroke-dashoffset="-98" />
+          <circle cx="252" cy="42" r="24" stroke-dasharray="22.6 128.2" stroke-dashoffset="-128.2" />
+        </g>
+        <g class="preview-legend">
+          <circle cx="210" cy="75" r="3.5" /><text x="220" y="78">Groceries</text>
+          <circle cx="210" cy="89" r="3.5" /><text x="220" y="92">Eating out</text>
+          <circle cx="210" cy="103" r="3.5" /><text x="220" y="106">Transport</text>
+        </g>
+      </svg>
+
+      <ul class="landing-points">
+        <li><strong>Every account in one place.</strong> Banks and brokerages connect through
+          Lunchflow. Foreign payments are converted at the rate on the day, refunds are matched to
+          the purchase they reverse, and transfers between your own accounts cancel out.</li>
+        <li><strong>Categories you control.</strong> Plain keyword rules, not a black box — and an AI
+          review that proposes them, flags amounts that look unusual for a payee, and points out
+          merchants widely reported as scams.</li>
+        <li><strong>Nobody else's business.</strong> No ads, no tracking, no analytics. Access is
+          read-only, so it can never move money, and you can export or delete everything at any
+          time.</li>
+      </ul>
+
+      <div class="err" id="err"></div>
+
+      <!-- Shown when the account cap is reached. The sign-in button stays put:
+           the cap only refuses new accounts, so existing users still get in. -->
+      <p class="field-hint" id="capacity-note" hidden></p>
+
+      <a class="btn google-signin" id="google-signin" href="/auth/google" hidden>
+        <span class="g">G</span> Continue with Google
+      </a>
+      <!-- The old label said "Sign in", which reads as "members only" to the one
+           group that matters here: people who do not have an account yet. There
+           is no separate sign-up, so the page has to say so. -->
+      <p class="field-hint signin-note" id="signin-note" hidden>New here? This creates your account —
+        there is no separate sign-up. Google is asked for your email address and nothing else.</p>
+
+      <!-- Local dev only: passwordless email login when Google isn't configured. -->
+      <form id="dev-form" autocomplete="on" hidden>
+        <label for="email">Email (dev login)</label>
+        <input id="email" name="email" type="email" autocomplete="username" required />
+        <button class="primary" type="submit">Continue</button>
+      </form>
+
+      <!-- Reached only by being turned away at the OAuth callback, which is also
+           where the verified address comes from — nothing to type in here. -->
+      <section id="closed-notice" hidden>
+        <p class="field-hint" id="closed-text"></p>
+        <button class="primary" id="waitlist-join" type="button">Join the waiting list</button>
+        <p class="field-hint" id="waitlist-status"></p>
+      </section>
+
+      <p class="field-hint landing-needs">Then setup takes about five minutes and two API keys of
+        your own: <strong>Lunchflow</strong> for the bank connection (paid, with a free trial) and
+        <strong>OpenAI</strong> for the review (billed to you, roughly a penny per transaction
+        reviewed — and you choose how much to review). <a href="/about">How it works →</a></p>
+
+      <p class="card-footer"><a href="/about">About</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+    </div>
+  </div>
+  <script src="/login.js"></script>
+</body>
+</html>

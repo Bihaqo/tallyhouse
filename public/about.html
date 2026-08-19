@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>About — Tallyhouse</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card about-card">
+      <h1>About Tallyhouse</h1>
+
+      <p>Tallyhouse is a personal spending dashboard. It reads your bank and brokerage accounts
+        through <a href="https://lunchflow.app" target="_blank" rel="noopener">Lunchflow</a>, sorts
+        each transaction with keyword rules you control, and shows where your money went, month by
+        month.</p>
+
+      <p>Set up whatever categories suit you, and mark any of them to be tracked on their own, apart
+        from everyday spending. Transfers between your own accounts are ignored, refunds are matched
+        against the purchase they reverse, and foreign-currency payments are converted at the rate
+        from the day they happened.</p>
+
+      <p>An AI review reads each transaction to suggest a category, flag amounts that look unusual
+        for a payee, and point out merchants that are widely reported as scams. It runs on your own
+        OpenAI key, so what it costs is visible to you and billed to you — and you decide how much of
+        it to buy: setup asks how far back to review and whether the reviewer may look payees up on
+        the web, with an estimate of what your answers come to, and both stay editable in Settings.</p>
+
+      <p>No tracking, no advertising, no analytics — and therefore no cookie banner to dismiss,
+        because the only cookie is the one that keeps you signed in. Your API keys are encrypted at
+        rest, and Tallyhouse only ever reads your accounts: it cannot move money. The
+        <a href="/privacy">privacy page</a> spells out exactly what is stored and where it goes.</p>
+
+      <p>Tallyhouse is built and reviewed with Claude Opus 5, including passes aimed squarely at
+        security: rate limits on everything that reaches a third party, a strict content-security
+        policy, and a hard ceiling on what any single request can make the server do. Those reviews
+        keep finding and fixing real things, which is rather the point — it is an AI code review
+        rather than a professional audit, so take it as evidence of care rather than a promise that
+        nothing is wrong.</p>
+
+      <p>You can export everything you have here as a single file, or delete your account and all of
+        its data, at any time from Settings.</p>
+
+      <p class="field-hint">Setting up takes a Lunchflow API key and an OpenAI API key — the setup
+        page explains where to get each one.</p>
+
+      <a class="btn about-cta" href="/">Get started</a>
+      <p class="card-footer"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+    </div>
+  </div>
+</body>
+</html>

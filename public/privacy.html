@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy — Tallyhouse</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card about-card">
+      <h1>Privacy</h1>
+
+      <p>Tallyhouse is a small personal-finance dashboard run by <strong>Alexander Novikov</strong>.
+        This page says what it stores, who else sees it, and how to get rid of it. Questions or
+        requests: <a href="mailto:privacy@tallyhouse.net">privacy@tallyhouse.net</a>.</p>
+
+      <h2>What it stores</h2>
+      <p><strong>Your email address and Google account id.</strong> Signing in asks Google for
+        <code>openid email</code> and nothing else — not your name, profile or picture.</p>
+      <p><strong>The Lunchflow and OpenAI API keys you enter.</strong> Encrypted (AES-256-GCM)
+        before they are written down; the encryption key lives in the server's environment, not in
+        the database.</p>
+      <p><strong>A cached copy of your transactions</strong> as Lunchflow returns them: date,
+        amount, currency, merchant, description, which account, and the original record.</p>
+      <p><strong>What you create here:</strong> your category rules, manual classifications, the AI
+        review results, and a running total of what the AI review has cost you.</p>
+      <p><strong>One cookie</strong>, <code>sid</code>, which keeps you signed in for 30 days. It is
+        strictly necessary to run the site — there are no analytics or advertising cookies, which is
+        why there is no banner asking you to accept any.</p>
+      <p><strong>A waiting-list entry</strong> — only your email address — if you arrived when
+        signups were full.</p>
+
+      <h2>Who else sees it</h2>
+      <p><strong>Google</strong> handles sign-in, and so learns that you signed in to Tallyhouse.</p>
+      <p><strong>Lunchflow</strong> is the service your bank is connected to; Tallyhouse reads your
+        accounts and transactions from them using the key you provide.</p>
+      <p><strong>OpenAI — worth reading twice.</strong> Tallyhouse asks a model to categorise your
+        transactions. What it sends, per transaction reviewed, is the merchant, description, amount,
+        date and account name, along with roughly a hundred surrounding transactions and per-category
+        totals for context. Unless you switch it off, the model also runs web searches on merchant
+        names it does not recognise — partly to work out what sort of business it is so it can be
+        categorised, and partly to notice payees that are widely reported as scams or fraudulent
+        billing, which are flagged for you to look at rather than quietly filed away. That lookup is
+        a setting (<strong>Settings → AI review</strong>, and a tick box during setup); with it off,
+        merchant names are never sent to a search engine. This is billed to your own OpenAI key and
+        governed by OpenAI's terms, and OpenAI processes it in the United States.</p>
+      <p>In this version the AI review is <strong>not optional</strong>: setup requires an OpenAI
+        key, and a review of your recent transactions starts automatically and then keeps up with new
+        ones. How far back that first pass reaches is up to you — setup asks, one month by default,
+        and Settings can change it afterwards. If you would rather your transaction data were never
+        sent to a model, Tallyhouse is not currently the right tool for you.</p>
+      <p><strong>Frankfurter</strong> supplies historical exchange rates. It is sent a currency code
+        and a date, and nothing about you or your transactions.</p>
+      <p><strong>Railway</strong> hosts the application and its database.</p>
+
+      <h2>What it never does</h2>
+      <p>No analytics, no tracking, no advertising, and no third-party scripts or fonts — every page
+        loads only from this domain. Your data is never sold, and never shared with anyone beyond the
+        services listed above. Accounts cannot see each other's data.</p>
+
+      <h2>Keeping and deleting</h2>
+      <p>Everything is kept until you remove it. <strong>Settings → Account → Delete</strong> erases
+        your account and everything attached to it — keys, rules, classifications, AI reviews, cached
+        transactions, and your sessions on every device. Historical exchange rates are kept, because
+        they are shared between accounts and say nothing about you.</p>
+      <p><strong>Settings → Export all data</strong> gives you the whole lot as a single JSON file
+        whenever you want it. Expired sessions are cleared automatically.</p>
+
+      <h2>Your rights</h2>
+      <p>Under UK GDPR you can ask for a copy of your data, have it corrected or erased, take it
+        elsewhere, or object to it being processed. The export and delete buttons in Settings cover
+        most of that immediately; for anything else, email
+        <a href="mailto:privacy@tallyhouse.net">privacy@tallyhouse.net</a>. The lawful basis is
+        performing the service you asked for. If you are unhappy with how this was handled you can
+        complain to the Information Commissioner's Office at
+        <a href="https://ico.org.uk" target="_blank" rel="noopener">ico.org.uk</a>.</p>
+
+      <h2>Changes</h2>
+      <p>Last updated 17 August 2026. Anything material that changes will be described here.</p>
+
+      <p class="card-footer"><a href="/terms">Terms</a> · <a href="/about">About Tallyhouse</a> · <a href="/">Back to the app</a></p>
+    </div>
+  </div>
+</body>
+</html>

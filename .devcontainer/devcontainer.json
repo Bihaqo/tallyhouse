@@ -1,0 +1,13 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
+    "ghcr.io/itsmechlark/features/postgresql:1": { "version": "16" },
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+  "containerEnv": {
+    "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/tallyhouse",
+    "PGSSL": "disable"
+  },
+  "postCreateCommand": "npm install && (psql \"postgresql://postgres:postgres@localhost:5432/postgres\" -c \"CREATE DATABASE tallyhouse;\" || true)"
+}

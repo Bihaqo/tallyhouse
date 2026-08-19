@@ -1,0 +1,13 @@
+{
+  "currency": "GBP",
+  "categories": [
+    {
+      "id": "internal-transfers",
+      "name": "Internal transfers",
+      "patterns": [],
+      "excludeFromSpending": true,
+      "tracker": false,
+      "autoTransfers": true
+    }
+  ]
+}

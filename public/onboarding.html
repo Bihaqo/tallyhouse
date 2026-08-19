@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Set up — Tallyhouse</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card onboarding-card">
+      <h1>Welcome<span id="who"></span></h1>
+
+      <!-- Three steps, in the order the answers become knowable: the bank key
+           first, because everything after it is decided from what that key
+           returns — what the AI review will cost, and which categories are
+           worth suggesting. -->
+      <ol class="setup-steps" id="setup-steps">
+        <li data-step="1">Connect</li>
+        <li data-step="2">AI review</li>
+        <li data-step="3">Categories</li>
+      </ol>
+
+      <div class="err" id="err"></div>
+
+      <!-- Step 1: the Lunchflow key, and an optional export to seed from. -->
+      <form id="step-connect" autocomplete="off">
+        <p class="onboarding-intro">Connect your bank first. Your key is encrypted and only used to
+          load your data — it is never shown to anyone else. The <a href="/privacy">privacy page</a>
+          says what is stored. Not sure what this is?
+          <a href="/about">Read the short version</a>.</p>
+
+        <div class="label-row">
+          <label for="lunchflow">Lunchflow API key</label>
+          <button type="button" class="help-icon" aria-expanded="false"
+            aria-controls="help-lunchflow" aria-label="What is Lunchflow?">?</button>
+        </div>
+        <input id="lunchflow" name="lunchflow" type="password" spellcheck="false" required />
+        <p class="field-hint">Read access to your accounts and transactions.</p>
+
+        <div class="help-panel" id="help-lunchflow" hidden>
+          <p><strong>Lunchflow</strong> connects your banks and brokerages — thousands of
+            institutions across 30+ countries — and serves them over one API. This dashboard reads
+            your accounts and transactions from it; it never touches your bank directly, and it only
+            ever reads.</p>
+          <p><strong>This dashboard is completely free.</strong> For Lunchflow, the first 7 days are
+            free with no card required; after that it is about $2.92 per month billed annually
+            ($34.99 a year), covering two connected accounts, with extra connections at $10 each.
+            See
+            <a href="https://www.lunchflow.app/pricing" target="_blank" rel="noopener">lunchflow.app/pricing</a>
+            for the current figure.</p>
+          <p class="help-steps-title">Getting a key</p>
+          <ol class="help-steps">
+            <li>Register at <a href="https://www.lunchflow.app" target="_blank" rel="noopener">lunchflow.app</a>
+              and start the free trial.</li>
+            <li>Connect your bank or brokerage from the Lunchflow dashboard.</li>
+            <li>Still in the dashboard, add an <strong>API destination</strong>.</li>
+            <li>Open that destination's settings and copy its API key.</li>
+            <li>Paste it above.</li>
+          </ol>
+        </div>
+
+        <label for="import">Import a data export <span class="optional">(optional)</span></label>
+        <input id="import" name="import" type="file" accept="application/json,.json" />
+        <p class="field-hint">Seed your account from a <code>tallyhouse-export-*.json</code> file (rules,
+          classifications, AI reviews). You can skip this — and if you use it, the categories step is
+          skipped, since the file brings its own.</p>
+
+        <button class="primary" type="submit">Continue</button>
+      </form>
+
+      <!-- Step 2: the AI review, priced against the data step 1 just read.
+           Every control here changes the estimate below it, which is the point:
+           the bill is the thing people cannot guess, and by now we know how many
+           transactions it would be spread over. -->
+      <section id="step-ai" hidden>
+        <h2 class="suggest-title">What the AI review is for</h2>
+        <p class="onboarding-intro">Categories are matched by plain keyword filters. The review is
+          what fills those in, and what keeps an eye on what they catch:</p>
+        <ul class="why-list">
+          <li><strong>Flags potentially suspicious transactions</strong> — an amount far outside what
+            a payee usually charges, a likely duplicate charge, or a merchant widely reported as a
+            scam.</li>
+          <li><strong>Suggests filters</strong> — keyword rules that assign uncategorised
+            transactions to a category, each one shown with exactly what it would catch before you
+            accept it.</li>
+        </ul>
+
+        <p class="onboarding-intro" id="scan-summary"></p>
+
+        <div class="label-row">
+          <label for="openai">OpenAI API key</label>
+          <button type="button" class="help-icon" aria-expanded="false"
+            aria-controls="help-openai" aria-label="Why is an OpenAI key needed?">?</button>
+        </div>
+        <input id="openai" name="openai" type="password" spellcheck="false" required />
+        <p class="field-hint">Powers the AI review of transactions. Billed to your own OpenAI account.</p>
+
+        <div class="help-panel" id="help-openai" hidden>
+          <p>The AI review reads one transaction at a time to suggest a category, propose a keyword
+            rule, and flag amounts that look unusual for that merchant. It is also what proposes
+            your starting category list on the next step, so setup needs it.</p>
+          <p><strong>There is no subscription</strong> — OpenAI bills your own account for what you
+            use. Reviews are cached, so each transaction is paid for once; after the first pass only
+            new transactions cost anything. <strong>Settings → AI usage</strong> keeps a running
+            total.</p>
+          <p class="help-steps-title">Getting a key</p>
+          <ol class="help-steps">
+            <li>Register at <a href="https://platform.openai.com" target="_blank" rel="noopener">platform.openai.com</a>.</li>
+            <li>Under <strong>Billing</strong>, add a payment method and some credit — a new
+              account's key fails until it has credit.</li>
+            <li>Go to <strong>API keys</strong> → <strong>Create new secret key</strong>.</li>
+            <li>Copy it straight away — OpenAI shows the key only once — and paste it above.</li>
+          </ol>
+        </div>
+
+        <label class="settings-currency" for="ai-months">Review the last
+          <input id="ai-months" type="number" min="1" max="24" step="1" value="1" /> months
+        </label>
+        <p class="field-hint">History the first review covers, newest first. New transactions are
+          reviewed as they arrive whatever you pick here, so this is only about how much of the past
+          is worth paying for up front. One month is a cheap way to see what the reviews are like;
+          you can raise it later in Settings.</p>
+
+        <label class="check-row">
+          <input id="ai-websearch" type="checkbox" checked />
+          <span>Look up unfamiliar merchants on the web</span>
+        </label>
+        <p class="field-hint">Lets the review find out what an unrecognised payee actually is, and
+          flag ones that are widely reported as scams or fraudulent billing. It is also most of the
+          cost, and it sends merchant names to a search engine. With it off, reviews are far cheaper
+          and judge from your own data alone.</p>
+
+        <div class="cost-estimate" id="ai-estimate"></div>
+
+        <button class="primary" id="ai-continue" type="button">Continue</button>
+        <button id="ai-back" type="button">← Back</button>
+      </section>
+
+      <!-- Step 3: the currency detected from their transactions, and the
+           category list proposed from their merchants, to accept or trim. An
+           import brings both of these with it, so it skips this step. -->
+      <section id="step-categories" hidden>
+        <h2 class="suggest-title">Your currency</h2>
+        <label class="settings-currency" for="onboarding-currency">Currency
+          <select id="onboarding-currency"></select>
+        </label>
+        <p class="field-hint" id="currency-note"></p>
+
+        <h2 class="suggest-title">Categories for your spending</h2>
+        <p class="field-hint" id="suggest-note"></p>
+        <div id="suggest-list" class="suggest-list"></div>
+        <button id="suggest-add" type="button">+ Add a category</button>
+        <p class="field-hint">Remove anything you don't want, rename what is not quite right, and add
+          any the suggestions missed. None of them have keyword rules yet: the AI review proposes
+          those one at a time as you go, showing what each would catch before it is applied.</p>
+        <button class="primary" id="suggest-accept" type="button">Create these and finish</button>
+        <button id="suggest-skip" type="button">Skip — start with no categories</button>
+      </section>
+
+      <!-- Signing in with the wrong Google account is easy to do and, without
+           this, a dead end: /login bounces a signed-in visitor to /, and / sends
+           anyone who has not onboarded straight back here. The way out has to
+           end the session first, so it is a button rather than a link. -->
+      <p class="card-footer">
+        <button type="button" class="linklike" id="switch-account">Sign in as someone else</button>
+      </p>
+      <p class="card-footer"><a href="/about">About Tallyhouse</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+    </div>
+  </div>
+  <script src="/currency.js"></script>
+  <script src="/onboarding.js"></script>
+</body>
+</html>

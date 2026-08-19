@@ -1,0 +1,944 @@
+:root {
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #2a78d6;
+  --accent-invest: #1baf7a;
+  --accent-renovation: #eb6834;
+  --accent-tax: #4a3aa7;
+  --danger: #d03b3b;
+  --series-1: #2a78d6;
+  --series-2: #1baf7a;
+  --series-3: #eda100;
+  --series-4: #008300;
+  --series-5: #4a3aa7;
+  --series-6: #e34948;
+  --series-7: #e87ba4;
+  --series-8: #eb6834;
+  --other: #898781;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --accent: #3987e5;
+    --accent-invest: #199e70;
+    --accent-renovation: #d95926;
+    --accent-tax: #9085e9;
+    --danger: #d03b3b;
+    --series-1: #3987e5;
+    --series-2: #199e70;
+    --series-3: #c98500;
+    --series-4: #008300;
+    --series-5: #9085e9;
+    --series-6: #e66767;
+    --series-7: #d55181;
+    --series-8: #d95926;
+    --other: #898781;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* The browser's default link blue is close to unreadable on the dark page. */
+a { color: var(--accent); }
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+header.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 20px;
+  /* Without this the meta text is crushed into a ~60px column on a phone and
+     wraps to seven lines while the buttons hold their width. */
+  flex-wrap: wrap;
+}
+header.topbar h1 { font-size: 20px; font-weight: 650; margin: 0; }
+header.topbar .meta { color: var(--text-muted); font-size: 13px; }
+header.topbar .spacer { flex: 1; }
+
+/* Narrow screens: title and buttons on one row, the status text on its own
+   below, where it has the full width to read normally. */
+@media (max-width: 700px) {
+  header.topbar { gap: 8px 12px; }
+  header.topbar h1 { flex: 0 0 auto; }
+  header.topbar .spacer { order: 1; flex: 1; }
+  header.topbar button,
+  header.topbar .topbar-link { order: 2; }
+  header.topbar .meta { order: 3; flex: 1 0 100%; }
+}
+header.topbar .topbar-link { text-decoration: none; }
+header.topbar .topbar-link:hover { color: var(--text-primary); }
+
+button, .btn {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+button:hover { color: var(--text-primary); }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.tile .label { font-size: 13px; color: var(--text-secondary); }
+.tile .value { font-size: 28px; font-weight: 650; margin-top: 2px; }
+.tile .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px 14px;
+  margin-bottom: 14px;
+}
+.card h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
+.card .sub { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.chart-box { position: relative; height: 300px; }
+.chart-box.tall { height: 340px; }
+.chart-box.donut { height: 260px; }
+
+.loading { opacity: 0.45; transition: opacity 0.2s; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.legend .key { display: inline-flex; align-items: center; gap: 7px; }
+.legend .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+table.cats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-top: 8px;
+}
+table.cats th {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--grid);
+}
+table.cats th:first-child { text-align: left; }
+table.cats td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--grid);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+table.cats td:first-child { text-align: left; color: var(--text-secondary); }
+table.cats tr:last-child td { border-bottom: none; }
+table.cats tr.providers-total td { font-weight: 650; border-top: 1px solid var(--baseline); color: var(--text-primary); }
+
+.err {
+  color: var(--danger);
+  font-size: 13.5px;
+  margin: 8px 0;
+  min-height: 20px;
+}
+
+/* Transaction detail page */
+#detail[hidden] { display: none; }
+.detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.detail-head h2 { font-size: 20px; font-weight: 650; margin: 0; }
+.detail-head .meta { color: var(--text-muted); font-size: 13px; }
+.detail-list-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.detail-list-head h2 { margin: 0; }
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 3px 6px 3px 12px;
+  cursor: pointer;
+}
+.filter-chip[hidden] { display: none; }
+.filter-chip .x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--border);
+  font-size: 12px;
+  line-height: 1;
+}
+.filter-chip:hover .x { background: var(--accent); color: #fff; }
+
+.tx-search {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(125px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+.tx-search.compact { margin: 10px 0 14px; }
+.tx-search label { color: var(--text-muted); font-size: 11.5px; }
+.tx-search input, .tx-search select {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 7px 9px;
+  color: var(--text-primary);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+}
+.tx-search-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tx-search-status { color: var(--text-muted); font-size: 12.5px; margin: 4px 0 10px; }
+@media (max-width: 850px) {
+  .tx-search { grid-template-columns: 1fr 1fr; }
+  .tx-search label:first-child { grid-column: 1 / -1; }
+}
+
+table.txs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.txs th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--grid);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+table.txs th.sortable { cursor: pointer; user-select: none; }
+table.txs th.sortable:hover { color: var(--text-primary); }
+table.txs td {
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+table.txs tr:last-child td { border-bottom: none; }
+table.txs tr.tx-row { cursor: pointer; }
+table.txs tr.tx-row:hover td { background: var(--page); }
+table.txs .tx-caret {
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-right: 6px;
+  transition: transform 0.12s;
+}
+table.txs tr.tx-row.open .tx-caret { transform: rotate(90deg); }
+table.txs .col-amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.txs .col-amount.income { color: var(--accent-invest); }
+table.txs .tx-merchant { color: var(--text-primary); }
+table.txs .tx-acct { color: var(--text-muted); font-size: 12px; }
+table.txs .tx-return-link { color: var(--accent); }
+table.txs .tx-counted { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+table.txs tr.tx-row.is-linked td { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+table.txs .tx-date { color: var(--text-muted); white-space: nowrap; }
+table.txs tr.is-internal .tx-merchant,
+table.txs tr.is-internal .col-amount { color: var(--text-muted); text-decoration: line-through; }
+
+/* ▾ opens the manual-classification menu: an invisible native select covers
+   the icon, so the browser's own dropdown renders the options. */
+.classify-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.classify-btn:hover { color: var(--text-primary); border-color: var(--baseline); }
+.classify-btn.overridden { border-color: var(--accent); color: var(--accent); }
+.classify-btn select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.tx-empty { color: var(--text-muted); padding: 20px 8px; text-align: center; }
+
+table.txs tr.tx-detail td { padding: 0 8px 10px; background: var(--page); }
+dl.raw {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 2px 14px;
+  margin: 4px 0 6px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+dl.raw dt { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+dl.raw dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  word-break: break-word;
+}
+
+/* AI review controls */
+.tx-ai { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; max-width: 240px; }
+.tx-ai:empty { display: none; }
+.tx-manual { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; max-width: 240px; }
+.tx-manual:empty { display: none; }
+.ai-btn {
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+.ai-btn.suggest { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.ai-btn.suggest:hover { background: var(--accent); color: #fff; }
+.ai-btn.ghost { border-color: transparent; background: none; color: var(--text-muted); padding: 2px 5px; }
+.ai-badge {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ai-badge.ok { color: var(--accent-invest); border-color: color-mix(in srgb, var(--accent-invest) 45%, transparent); }
+.ai-badge.warn { color: var(--accent-renovation); border-color: color-mix(in srgb, var(--accent-renovation) 45%, transparent); font-weight: 600; }
+.ai-badge.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.ai-note { flex-basis: 100%; font-size: 11px; color: var(--accent-renovation); }
+.classify-btn optgroup { font-style: normal; color: var(--text-muted); }
+.classify-btn option { color: var(--text-primary); background: var(--surface); }
+table.txs tr.is-outlier td { background: color-mix(in srgb, var(--accent-renovation) 8%, transparent); }
+table.txs td.outlier-reason { color: var(--text-secondary); font-size: 12.5px; max-width: 340px; }
+.outliers-h { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 14px 0 4px; }
+.outliers-h:first-child { margin-top: 4px; }
+
+/* Add-rule modal */
+dialog#rule-modal {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 22px 24px;
+  width: min(620px, 94vw);
+}
+dialog#rule-modal::backdrop { background: rgba(0, 0, 0, 0.45); }
+dialog#rule-modal h2 { font-size: 16px; margin: 0 0 4px; }
+dialog#rule-modal .sub { font-size: 12.5px; color: var(--text-muted); margin: 0 0 10px; }
+dialog#rule-modal label { display: block; font-size: 13px; color: var(--text-secondary); margin: 10px 0 4px; }
+dialog#rule-modal input, dialog#rule-modal select {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--page);
+  color: var(--text-primary);
+}
+dialog#rule-modal input:focus, dialog#rule-modal select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.modal-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* Destructive actions. Red is reserved for these — nothing else in the app
+   uses --danger as a fill, so the colour alone says the button is different. */
+button.danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+  font-weight: 600;
+}
+button.danger:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.danger:disabled { opacity: 0.45; }
+
+.danger-zone {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.danger-zone h3 { font-size: 14px; margin: 0 0 4px; color: var(--danger); }
+
+#account-card .sub strong { color: var(--text-primary); font-weight: 600; }
+
+/* The delete dialog. Wordier and redder than the rule modal on purpose: it is
+   the one irreversible action in the app. */
+dialog#delete-modal {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 24px 26px;
+  width: min(560px, 94vw);
+}
+dialog#delete-modal::backdrop { background: rgba(0, 0, 0, 0.62); }
+.danger-title { font-size: 17px; margin: 0 0 10px; color: var(--danger); }
+.delete-lede { font-size: 13.5px; margin: 0 0 8px; line-height: 1.5; }
+.delete-list {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.delete-note { font-size: 12.5px; color: var(--text-muted); margin: 0 0 16px; }
+
+.delete-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.delete-step { font-size: 13.5px; }
+.delete-step .sub { font-size: 12.5px; color: var(--text-muted); margin: 4px 0 8px; line-height: 1.45; }
+/* Step two stays visibly out of reach until the export is downloaded, rather
+   than disappearing — the point is to show there is a step you have not done. */
+.delete-step.is-locked { opacity: 0.45; }
+.delete-step.is-done > strong { text-decoration: line-through; color: var(--text-muted); }
+.delete-step input {
+  display: block;
+  margin-top: 6px;
+  width: min(220px, 100%);
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: 0.08em;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--page);
+  color: var(--text-primary);
+}
+.delete-step input:focus { outline: 2px solid var(--danger); border-color: transparent; }
+.delete-step code {
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* Rule match previews (modal + settings) */
+.rule-preview { max-height: 260px; overflow: auto; }
+.rule-preview table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.rule-preview td { padding: 4px 8px; border-bottom: 1px solid var(--grid); color: var(--text-secondary); }
+.rule-preview td:first-child { white-space: nowrap; color: var(--text-muted); }
+.rule-preview td:last-child { white-space: nowrap; }
+.preview-summary { font-size: 12.5px; color: var(--text-secondary); margin: 8px 0 6px; }
+.tx-similar { margin-bottom: 10px; }
+.tx-similar .preview-summary:first-child { font-weight: 600; color: var(--text); }
+
+/* Settings page */
+#settings[hidden] { display: none; }
+.settings-actions { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; flex-wrap: wrap; }
+.settings-currency { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+.settings-currency input,
+.settings-currency select {
+  width: 56px;
+  font: inherit;
+  padding: 5px 8px;
+  margin-left: 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--page);
+  color: var(--text-primary);
+}
+/* Wide enough for "GBP — Pound sterling (£)", unlike the narrow number fields
+   that share this label style. */
+.settings-currency select { width: auto; max-width: 100%; }
+/* A tick box in the same label row reads as a control in front of its text, so
+   it keeps its own size and sits before the words rather than after them. */
+.settings-currency input[type="checkbox"] {
+  width: auto;
+  margin: 0 6px 0 0;
+  vertical-align: middle;
+}
+.rule-entry {
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.rule-entry-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.rule-entry-head .rule-name {
+  flex: 1;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--page);
+  color: var(--text-primary);
+}
+textarea.rule-patterns {
+  display: block;
+  width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--page);
+  color: var(--text-primary);
+  resize: vertical;
+}
+textarea.rule-patterns:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+/* Login */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+  width: min(360px, 92vw);
+}
+.login-card h1 { font-size: 19px; margin: 0 0 18px; }
+.login-card label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 12px 0 4px;
+}
+.login-card input {
+  width: 100%;
+  font: inherit;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--baseline);
+  background: var(--page);
+  color: var(--text-primary);
+}
+.login-card input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.login-card button { width: 100%; margin-top: 18px; padding: 10px; font-size: 14px; }
+.login-card .google-signin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+/* `display: flex` above beats the UA stylesheet's `[hidden] { display: none }`,
+   so without this the button stayed on screen on a deployment with no Google
+   credentials configured — a dead control that bounced back to this page. */
+.login-card .google-signin[hidden] { display: none; }
+.login-card .google-signin .g {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  color: #4285f4;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+/* ---------- the landing page ----------
+   The first screen used to be a title and a Google button: it said neither what
+   this is nor that signing in is how you get an account. It is now a short
+   pitch — what it does, a sketch of it doing that, and what setting it up will
+   ask of you — with the button underneath. */
+.landing-card { width: min(420px, 92vw); }
+.landing-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.landing-mark { display: block; border-radius: 8px; }
+.login-card .landing-title { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+.landing-tagline { margin: 2px 0 0; font-size: 13px; color: var(--text-secondary); }
+
+/* The sketch. Muted by default with the current month in accent, so it reads as
+   an illustration of the dashboard rather than a screenshot of someone's data. */
+.landing-preview { display: block; width: 100%; height: auto; margin: 0 0 20px; }
+.preview-bars rect { fill: var(--grid); }
+.preview-bars rect.is-current { fill: var(--accent); }
+.preview-axis { stroke: var(--baseline); stroke-width: 1; }
+.preview-label text { fill: var(--text-muted); font-size: 8px; text-anchor: middle; }
+.preview-donut circle { fill: none; stroke-width: 12; }
+.preview-donut circle:nth-child(1) { stroke: var(--series-1); }
+.preview-donut circle:nth-child(2) { stroke: var(--series-2); }
+.preview-donut circle:nth-child(3) { stroke: var(--series-3); }
+.preview-donut circle:nth-child(4) { stroke: var(--other); }
+.preview-legend text { fill: var(--text-muted); font-size: 8.5px; }
+.preview-legend circle:nth-of-type(1) { fill: var(--series-1); }
+.preview-legend circle:nth-of-type(2) { fill: var(--series-2); }
+.preview-legend circle:nth-of-type(3) { fill: var(--series-3); }
+
+.landing-points {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.landing-points strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* Directly under the button, because it is about the button. */
+.login-card .signin-note { margin-top: 8px; text-align: center; }
+.landing-needs {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.landing-needs strong { color: var(--text-secondary); font-weight: 600; }
+/* The error slot reserves its height everywhere else so an arriving message
+   does not shove the form down. Here it sits between the pitch and the button,
+   where an always-empty 36px gap is the more visible cost of the two. */
+.landing-card .err:empty { min-height: 0; margin: 0; }
+
+/* Onboarding reuses the login card, a touch wider for the longer form. */
+.onboarding-card { width: min(440px, 92vw); }
+.onboarding-intro { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; line-height: 1.5; }
+.login-card .field-hint { font-size: 12px; color: var(--text-muted); margin: 4px 0 0; line-height: 1.4; }
+.login-card .field-hint code { font-size: 11.5px; }
+.login-card .optional { color: var(--text-muted); font-weight: 400; }
+
+/* A field label with its "?" help toggle sitting next to it. */
+.login-card .label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 12px 0 4px;
+}
+.login-card .label-row label { margin: 0; }
+
+/* The "?" itself: a circle small enough to read as an aside, not a control the
+   form needs. .help-icon-inline is the same circle rendered as static text, so
+   the intro can point at it. The selector has to out-specify
+   `.login-card button`, which stretches form buttons to the full width. */
+.login-card .help-icon,
+.help-icon-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--baseline);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.login-card .help-icon { cursor: pointer; }
+.login-card .help-icon:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.login-card .help-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.login-card .help-icon[aria-expanded="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.help-panel {
+  margin: 8px 0 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--page);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.help-panel[hidden] { display: none; }
+.help-panel p { margin: 0 0 8px; }
+.help-panel p:last-child { margin-bottom: 0; }
+.help-panel strong { color: var(--text-primary); font-weight: 600; }
+.help-steps-title { color: var(--text-primary); font-weight: 600; }
+.help-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* About */
+.about-card { width: min(480px, 92vw); }
+.about-card p { font-size: 13.5px; color: var(--text-secondary); margin: 0 0 12px; line-height: 1.55; }
+/* The privacy page is the only long-form card, so it needs a heading level below
+   the title. Sized to separate sections without competing with the h1. */
+.about-card h2 {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 22px 0 8px;
+}
+.about-card code { font-size: 12px; }
+.about-card .field-hint { margin: 0 0 4px; }
+.about-card .about-cta {
+  display: block;
+  margin-top: 18px;
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.card-footer {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+/* A button that has to look like the links beside it, because what it does is
+   navigate — it only needs to be a button so it can end the session first. */
+.linklike {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.linklike:hover { color: var(--accent); }
+.linklike:disabled { opacity: 0.5; cursor: default; }
+
+/* The three setup steps, as a progress line above the card's contents. */
+.setup-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.setup-steps li {
+  flex: 1;
+  padding-top: 6px;
+  border-top: 2px solid var(--border);
+}
+.setup-steps li.is-done { border-top-color: var(--text-muted); }
+.setup-steps li.is-current {
+  border-top-color: var(--accent);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Setup step two: what the AI review may do, and what that comes to. */
+/* What it is for, before what it costs — the two things it does, in the order
+   someone deciding whether to pay for it would want them. */
+.why-list {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.why-list strong { color: var(--text-secondary); font-weight: 600; }
+#scan-summary { margin-top: 14px; }
+.login-card .settings-currency input[type="number"] { width: 64px; }
+.login-card .check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.login-card .check-row input { width: auto; flex: 0 0 auto; margin-top: 1px; }
+
+/* The running estimate. Bordered rather than plain text because it is the one
+   thing on the page that changes as you touch the controls above it. */
+.cost-estimate {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--page);
+}
+.cost-estimate-head { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.cost-estimate-note {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+#ai-back { margin-top: 8px; }
+
+/* Setup step three: the proposed category list, editable in place. */
+.suggest-title { font-size: 15px; margin: 20px 0 4px; }
+.suggest-title:first-child { margin-top: 0; }
+.suggest-list { margin: 10px 0; display: flex; flex-direction: column; }
+.suggest-row {
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.suggest-row:last-child { border-bottom: none; }
+.suggest-head { display: flex; align-items: center; gap: 8px; }
+.login-card .suggest-name {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 550;
+}
+/* Both of these have to out-specify `.login-card button`, which stretches form
+   buttons across the card — right for "Continue", wrong for a row's own
+   control and for an action that sits below the list it adds to. */
+.login-card .suggest-remove {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.login-card .suggest-remove:hover { color: var(--text-primary); }
+.login-card #suggest-add { margin-top: 0; padding: 7px; font-size: 12.5px; }
+.suggest-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.suggest-flags label { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-size: 11.5px; cursor: pointer; }
+.login-card .suggest-flags input { width: auto; }
+.suggest-badge {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+.suggest-meta { margin: 4px 0 0; color: var(--text-muted); font-size: 11.5px; }
+#suggest-skip { width: 100%; margin-top: 8px; }
+.login-card input[type="file"] { padding: 8px; font-size: 13px; }
+.rule-flags { display: flex; gap: 14px; flex-wrap: wrap; margin: 6px 0 8px; font-size: 12.5px; color: var(--text-secondary); }
+.rule-flags label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.rule-flags .flag-warning:not(:empty) { color: var(--warning, #b45309); }
+
+/* ---------- admin panel (private/admin.html) ---------- */
+
+.admin-page { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+.admin-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.admin-head h1 { margin: 0; font-size: 22px; }
+.admin-head .sub { font-size: 13px; color: var(--text-muted); margin: 4px 0 0; max-width: 60ch; }
+.admin-head .ai-btn { text-decoration: none; white-space: nowrap; }
+/* The account table is wider than a phone; it scrolls inside its own card
+   rather than making the whole page scroll sideways. */
+.admin-scroll { overflow-x: auto; }
+.admin-muted { color: var(--text-muted); }
+.admin-limits { margin: 0 0 12px; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+.admin-limits li { margin-bottom: 6px; }
+
+.funnel-row { margin-bottom: 14px; }
+.funnel-row:last-child { margin-bottom: 0; }
+.funnel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13.5px; }
+.funnel-step { color: var(--text-primary); font-weight: 600; }
+.funnel-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.funnel-track { height: 10px; border-radius: 5px; background: var(--page); margin: 5px 0 3px; overflow: hidden; }
+.funnel-fill { height: 100%; background: var(--accent); border-radius: 5px; min-width: 2px; }
+.funnel-note { font-size: 12px; color: var(--text-muted); }
+
+.signup-chart { display: flex; align-items: flex-end; gap: 6px; height: 150px; }
+.signup-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+/* The bar is a share of this track, not of the whole column, so the tallest
+   month cannot push its own label out of the chart. */
+.signup-track { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.signup-bar { width: 100%; max-width: 44px; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.signup-n { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; margin-bottom: 3px; min-height: 17px; }
+.signup-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; white-space: nowrap; }
+
+/* The settings page links here for operators; an anchor needs the underline off
+   and a box it can be padded in. */
+a.btn { text-decoration: none; display: inline-block; }
