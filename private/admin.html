@@ -47,17 +47,21 @@
     </section>
 
     <section class="card">
-      <h2>Accounts</h2>
-      <p class="sub">Newest first. "Last sign-in" is exactly that, not last activity — see the note
-        at the bottom of this page.</p>
+      <h2>A typical account</h2>
+      <p class="sub">Counted over accounts that finished setup — an account that stopped at the key
+        form is a zero in every column below, and including it would just be the funnel again.
+        Median and average are both here because one heavy user drags a mean upward on an instance
+        this size; where they disagree, the median is the typical account and the average is
+        somebody's outlier. Neither is a person: this panel holds no per-account rows and no email
+        addresses, by choice rather than by absence.</p>
+      <section class="tiles" id="per-account-tiles"></section>
       <div class="admin-scroll">
-        <table class="txs" id="accounts">
+        <table class="txs" id="per-account">
           <thead>
             <tr>
-              <th>Email</th><th>Signed up</th><th>Setup</th><th>Last sign-in</th>
-              <th class="col-amount">Sign-ins</th><th class="col-amount">Banks</th>
-              <th class="col-amount">Categories</th><th class="col-amount">Manual</th>
-              <th class="col-amount">Reviews</th><th class="col-amount">AI spend</th>
+              <th>Per account</th>
+              <th class="col-amount">Median</th>
+              <th class="col-amount">Average</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -71,6 +75,11 @@
         event log and no page-view record, because the privacy policy says "no analytics, no
         tracking" and a first-party cookieless one would still be analytics. So:</p>
       <ul class="admin-limits">
+        <li><strong>Who anybody is.</strong> This one is a choice, not a gap: the database knows
+          every address, and the queries behind this page decline to select them. Anything that
+          genuinely needs one account — a support request, a deletion — goes through psql, where it
+          costs a deliberate act instead of a glance. With only a handful of accounts, note that an
+          average is never far from an individual either.</li>
         <li><strong>Which page someone abandoned</strong> is not recorded anywhere, and no
           reconstruction of it exists.</li>
         <li><strong>Last activity</strong> is not available. It looks like it should be —

@@ -2,11 +2,12 @@
 
 // The operator panel: who can reach it, and whether its numbers are real.
 //
-// The access tests matter more than they look. The panel reports every
-// account's email and spend, so "any signed-in stranger" reaching it would be a
-// data breach rather than an untidy route — and its HTML lives outside public/
-// precisely so express.static cannot serve it, which is a property worth
-// holding onto with a test.
+// Two properties are held here. The panel is for whoever runs the instance, so
+// "any signed-in stranger" reaching it would be an untidy route at best; its
+// HTML lives outside public/ precisely so express.static cannot serve it.
+// And it is aggregate-only — no email addresses, no per-account rows — which is
+// a deliberate constraint that a convenient-looking column could quietly undo,
+// so it is asserted against the payload rather than trusted to the queries.
 
 process.env.MOCK_DATA = '1';
 process.env.ADMIN_EMAILS = 'boss@example.com, Second.Admin@Example.com';
@@ -85,7 +86,8 @@ test('a signed-in non-admin is told the panel does not exist', { skip }, async (
   const page = await get('/admin', cookie);
   assert.equal(page.status, 404);
 
-  // The panel would report every account's email, so the page must never be
+  // Being useless without the API would not stop the page itself from telling a
+  // stranger that the panel exists and what it measures, so it must not be
   // reachable as a static file either. This is why it lives in private/.
   for (const path of ['/admin.html', '/admin.js', '/admin/app.js']) {
     assert.equal((await get(path, cookie)).status, 404, path);
@@ -124,15 +126,8 @@ test('/api/me tells the app whether to show the admin link', { skip }, async () 
 const step = (doc, name) => doc.funnel.find((s) => s.step === name).count;
 
 test('an account that signs in and stops there sits in the first gap', { skip }, async () => {
-  const email = `abandoner-${Date.now()}@example.com`;
-  await signIn(email);
+  await signIn(`abandoner-${Date.now()}@example.com`);
   const data = await (await get('/api/admin/stats', await signIn('boss@example.com'))).json();
-
-  const row = data.accounts.find((a) => a.email === email);
-  assert.ok(row, 'the account appears in the table');
-  assert.equal(row.onboardedAt, null, 'signing in is not finishing setup');
-  assert.equal(row.hasLunchflow, false);
-  assert.ok(row.signIns30d >= 1, 'its sign-in is the one activity signal there is');
 
   // Each step is a subset of the one above it; a funnel that widens is a bug.
   const counts = data.funnel.slice(0, 4).map((s) => s.count);
@@ -142,13 +137,15 @@ test('an account that signs in and stops there sits in the first gap', { skip },
   // The funnel and the headline tiles must be counting the same thing.
   assert.equal(step(data, 'Signed in'), data.totals.total);
   assert.equal(step(data, 'Finished setup'), data.totals.onboarded);
+  // And the per-account figures average over the finishers, not everybody: the
+  // account just created is in the first number and must not be in the second.
+  assert.ok(data.totals.total > data.perAccount.accounts);
+  assert.equal(data.perAccount.accounts, data.totals.onboarded);
 });
 
 test('finishing setup moves an account down the funnel', { skip }, async () => {
-  const email = `finisher-${Date.now()}@example.com`;
-  const cookie = await signIn(email);
+  const cookie = await signIn(`finisher-${Date.now()}@example.com`);
   const before = await (await get('/api/admin/stats', await signIn('boss@example.com'))).json();
-  assert.ok(!before.accounts.find((a) => a.email === email).onboardedAt);
 
   await fetch(`${base}/api/onboarding`, {
     method: 'POST',
@@ -157,13 +154,40 @@ test('finishing setup moves an account down the funnel', { skip }, async () => {
   });
 
   const after = await (await get('/api/admin/stats', await signIn('boss@example.com'))).json();
-  const row = after.accounts.find((a) => a.email === email);
-  assert.ok(row.onboardedAt, 'now carries a setup date');
-  assert.equal(row.hasLunchflow, true);
-  assert.equal(row.hasOpenai, true);
-  assert.equal(row.currency, 'EUR', 'and the currency it chose during setup');
-  assert.ok(row.categories >= 1, 'and the rules document setup wrote');
   assert.ok(step(after, 'Finished setup') >= step(before, 'Finished setup') + 1);
+  assert.ok(after.perAccount.accounts >= before.perAccount.accounts + 1);
+  // It arrived with an OpenAI key and a starting category list, so the two
+  // measures that describe those cannot still be reading empty.
+  assert.ok(after.perAccount.withOpenai >= 1);
+  const categories = after.perAccount.metrics.find((m) => m.metric === 'Categories');
+  assert.ok(categories.average > 0, 'setup wrote a rules document');
+});
+
+// The panel's whole shape: numbers about accounts, never a list of them. A
+// column added for convenience later would break this without looking wrong.
+test('the statistics name nobody', { skip }, async () => {
+  const email = `named-${Date.now()}@example.com`;
+  const cookie = await signIn(email);
+  await fetch(`${base}/api/onboarding`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ lunchflow: 'lf-key', openai: 'oa-key', currency: 'EUR' }),
+  });
+
+  const res = await get('/api/admin/stats', await signIn('boss@example.com'));
+  const body = await res.text();
+  assert.equal(res.status, 200);
+  assert.ok(!body.includes(email), 'the account that just onboarded is not in the payload');
+  assert.doesNotMatch(body, /@example\.com/, 'nor is any other test account');
+  assert.doesNotMatch(body, /[\w.+-]+@[\w-]+\.[\w.]+/, 'nor anything shaped like an address');
+
+  const data = JSON.parse(body);
+  assert.equal(data.accounts, undefined, 'the per-account table is gone, not hidden client-side');
+  assert.ok(Number.isInteger(data.perAccount.accounts), 'replaced by a count');
+  for (const row of data.perAccount.metrics) {
+    assert.equal(typeof row.median, 'number', `${row.metric} has a median`);
+    assert.equal(typeof row.average, 'number', `${row.metric} has an average`);
+  }
 });
 
 test('signups cover twelve months, oldest first, including empty ones', { skip }, async () => {

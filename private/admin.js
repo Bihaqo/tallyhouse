@@ -141,36 +141,45 @@ function renderSignups(months) {
   host.appendChild(chart);
 }
 
-function renderAccounts(rows) {
-  const body = $('accounts').querySelector('tbody');
+// One decimal, because these are averages over a handful of accounts and
+// rounding "1.5 banks" to 2 would invent a precision the number does not have.
+const num = (n) => (Number.isInteger(n) ? nf.format(n) : Number(n).toFixed(1));
+const measure = (value, unit) => (unit === 'usd' ? usd(value) : num(value));
+
+function renderPerAccount(data) {
+  const { accounts, withOpenai, withOverrides, activeWeek, activeMonth, metrics } = data;
+
+  $('per-account-tiles').replaceChildren(
+    tile('Set-up accounts', nf.format(accounts), 'everything below is over these'),
+    tile('Signed in recently', nf.format(activeWeek),
+      `this week · ${nf.format(activeMonth)} in the last 30 days`),
+    tile('Running the AI review', nf.format(withOpenai), 'gave an OpenAI key of their own'),
+    tile('Classifying by hand', nf.format(withOverrides), 'have corrected at least one')
+  );
+
+  const body = $('per-account').querySelector('tbody');
   body.replaceChildren();
-  for (const row of rows) {
+  if (!accounts) {
+    const cell = body.insertRow().insertCell();
+    cell.colSpan = 3;
+    cell.textContent = 'Nobody has finished setup yet, so there is nothing to average.';
+    cell.className = 'admin-muted';
+    return;
+  }
+  for (const row of metrics) {
     const tr = body.insertRow();
-    tr.insertCell().textContent = row.email;
-    tr.insertCell().textContent = date(row.createdAt);
+    const head = tr.insertCell();
+    head.textContent = row.metric;
+    const note = document.createElement('div');
+    note.className = 'admin-muted';
+    note.textContent = row.note;
+    head.appendChild(note);
 
-    const setup = tr.insertCell();
-    setup.textContent = row.onboardedAt ? date(row.onboardedAt) : 'unfinished';
-    if (!row.onboardedAt) setup.className = 'admin-muted';
-
-    tr.insertCell().textContent = ago(row.lastSignIn);
-
-    const number = (text) => {
+    for (const value of [row.median, row.average]) {
       const cell = tr.insertCell();
       cell.className = 'col-amount';
-      cell.textContent = text;
-    };
-    for (const value of [row.signIns30d, row.bankAccounts, row.categories, row.overrides, row.reviews]) {
-      number(nf.format(value || 0));
+      cell.textContent = measure(value, row.unit);
     }
-    number(usd(row.costUsd));
-  }
-  if (!rows.length) {
-    const tr = body.insertRow();
-    const cell = tr.insertCell();
-    cell.colSpan = 10;
-    cell.textContent = 'No accounts yet.';
-    cell.className = 'admin-muted';
   }
 }
 
@@ -184,7 +193,7 @@ async function load() {
   renderFunnel(data.funnel);
   renderSignups(data.signups);
   renderUse(data);
-  renderAccounts(data.accounts);
+  renderPerAccount(data.perAccount);
   $('generated').textContent = `Read from the database at ${new Date(data.generatedAt)
     .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}. Nothing here is tracked — it is all counted on request.`;
 }

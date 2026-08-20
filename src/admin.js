@@ -12,9 +12,19 @@
  * question this file answers is "what can be known from what is already
  * stored?" and not "what would be useful to record?".
  *
+ * Nor does it name anybody. Every figure is a total, a median or an average
+ * over accounts; no query here returns an email address or a per-account row,
+ * so the panel answers "how is the instance doing?" and cannot be used to look
+ * at a person. That is a second constraint on top of the first, and a stricter
+ * one: the data to identify an account plainly exists in `users`, and this file
+ * declines to select it.
+ *
  * The cost is that some obvious questions cannot be answered honestly here, and
  * the panel says so rather than approximating:
  *
+ *   - Who anybody is, or what any one account did. By choice, not absence —
+ *     the database still knows, and a support request or a deletion goes
+ *     through psql, where it takes a deliberate act rather than a glance.
  *   - Which page someone abandoned. Never recorded, so never available.
  *   - When someone was last *active*. transactions_cache.cached_at looks like
  *     it, but the background sweep refreshes it hourly for every onboarded
@@ -174,41 +184,97 @@ async function waitlist(q = db) {
 }
 
 /**
- * One row per account, newest first.
+ * What a typical set-up account looks like, as medians and averages.
  *
- * Deliberately does not touch transactions_cache.txs: it is the biggest column
- * in the database and reading it for every account would make this page a heavy
- * query for a number nobody needs. The accounts array next to it is small, so
+ * This is deliberately not one row per account. Running the instance needs to
+ * know the shape of the use — whether people connect one bank or four, whether
+ * anyone classifies by hand, what the AI costs them — and none of those
+ * questions need a name attached to answer. A table of addresses is also a page
+ * that cannot be screenshotted, read over a shoulder, or handed to anyone
+ * helping out, and it makes routine curiosity about a specific person the
+ * default gesture rather than a deliberate one. Anything genuinely needing an
+ * individual (a support request, a deletion) goes through the database, where
+ * it is a decision rather than a glance.
+ *
+ * Only onboarded accounts count. An account that stopped at the key form has a
+ * zero in every column here, and including them would make each of these
+ * numbers a second, worse reading of the funnel rather than a description of
+ * what set-up accounts do.
+ *
+ * Median as well as average because with a small instance one heavy user drags
+ * every mean upward: the pair is what tells you which you are looking at.
+ *
+ * Deliberately does not touch transactions_cache.txs — it is the biggest column
+ * in the database and reading it per account would make this page a heavy query
+ * for a number nobody needs. The accounts array beside it is small, so
  * connected-account counts come from there.
  */
-async function accounts(q = db, limit = 500) {
+async function perAccount(q = db) {
   const { rows } = await q.query(`
-    SELECT u.id, u.email, u.created_at AS "createdAt", u.onboarded_at AS "onboardedAt",
-           (u.lunchflow_key IS NOT NULL) AS "hasLunchflow",
-           (u.openai_key IS NOT NULL) AS "hasOpenai",
-           r.doc->>'currency' AS currency,
-           jsonb_array_length(coalesce(r.doc->'categories', '[]'::jsonb)) AS categories,
-           jsonb_array_length(coalesce(tc.accounts, '[]'::jsonb)) AS "bankAccounts",
-           coalesce(ovr.n, 0)::int AS overrides,
-           coalesce(rev.n, 0)::int AS reviews,
-           coalesce((au.stats->>'costUsd')::numeric, 0)::float AS "costUsd",
-           s."lastSignIn", coalesce(s.n, 0)::int AS "signIns30d"
-    FROM users u
-    LEFT JOIN rules r ON r.user_id = u.id
-    LEFT JOIN transactions_cache tc ON tc.user_id = u.id
-    LEFT JOIN ai_usage au ON au.user_id = u.id
-    LEFT JOIN (SELECT user_id, count(*) AS n FROM overrides GROUP BY user_id) ovr ON ovr.user_id = u.id
-    LEFT JOIN (SELECT user_id, count(*) AS n FROM ai_reviews GROUP BY user_id) rev ON rev.user_id = u.id
-    LEFT JOIN (
-      SELECT (${SESSION_USER})::bigint AS user_id,
-             count(*) AS n,
-             max(${SESSION_START}) AS "lastSignIn"
-      FROM user_sessions WHERE ${SESSION_OF_USER} GROUP BY 1
-    ) s ON s.user_id = u.id
-    ORDER BY u.created_at DESC
-    LIMIT $1
-  `, [limit]);
-  return rows;
+    WITH per_account AS (
+      SELECT (u.openai_key IS NOT NULL) AS has_openai,
+             jsonb_array_length(coalesce(tc.accounts, '[]'::jsonb)) AS bank_accounts,
+             jsonb_array_length(coalesce(r.doc->'categories', '[]'::jsonb)) AS categories,
+             coalesce(ovr.n, 0) AS overrides,
+             coalesce(rev.n, 0) AS reviews,
+             coalesce((au.stats->>'costUsd')::numeric, 0) AS cost_usd,
+             coalesce(s.n, 0) AS sign_ins,
+             s.last_sign_in
+      FROM users u
+      LEFT JOIN rules r ON r.user_id = u.id
+      LEFT JOIN transactions_cache tc ON tc.user_id = u.id
+      LEFT JOIN ai_usage au ON au.user_id = u.id
+      LEFT JOIN (SELECT user_id, count(*) AS n FROM overrides GROUP BY user_id) ovr ON ovr.user_id = u.id
+      LEFT JOIN (SELECT user_id, count(*) AS n FROM ai_reviews GROUP BY user_id) rev ON rev.user_id = u.id
+      LEFT JOIN (
+        SELECT (${SESSION_USER})::bigint AS user_id,
+               count(*) AS n,
+               max(${SESSION_START}) AS last_sign_in
+        FROM user_sessions WHERE ${SESSION_OF_USER} GROUP BY 1
+      ) s ON s.user_id = u.id
+      WHERE u.onboarded_at IS NOT NULL
+    )
+    SELECT count(*)::int AS accounts,
+           count(*) FILTER (WHERE has_openai)::int AS "withOpenai",
+           count(*) FILTER (WHERE overrides > 0)::int AS "withOverrides",
+           count(*) FILTER (WHERE last_sign_in > now() - interval '7 days')::int AS "activeWeek",
+           count(*) FILTER (WHERE last_sign_in IS NOT NULL)::int AS "activeMonth",
+           coalesce(avg(bank_accounts), 0)::float AS "bankAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY bank_accounts), 0)::float AS "bankMedian",
+           coalesce(avg(categories), 0)::float AS "categoriesAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY categories), 0)::float AS "categoriesMedian",
+           coalesce(avg(overrides), 0)::float AS "overridesAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY overrides), 0)::float AS "overridesMedian",
+           coalesce(avg(reviews), 0)::float AS "reviewsAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY reviews), 0)::float AS "reviewsMedian",
+           coalesce(avg(cost_usd), 0)::float AS "costAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd), 0)::float AS "costMedian",
+           coalesce(avg(sign_ins), 0)::float AS "signInsAvg",
+           coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY sign_ins), 0)::float AS "signInsMedian"
+    FROM per_account
+  `);
+  const r = rows[0];
+  return {
+    accounts: r.accounts,
+    withOpenai: r.withOpenai,
+    withOverrides: r.withOverrides,
+    activeWeek: r.activeWeek,
+    activeMonth: r.activeMonth,
+    metrics: [
+      { metric: 'Bank accounts', median: r.bankMedian, average: r.bankAvg,
+        note: 'connected through Lunchflow' },
+      { metric: 'Categories', median: r.categoriesMedian, average: r.categoriesAvg,
+        note: 'after setup proposed a starting list' },
+      { metric: 'Manual classifications', median: r.overridesMedian, average: r.overridesAvg,
+        note: 'the one number nothing but a person creates' },
+      { metric: 'AI reviews', median: r.reviewsMedian, average: r.reviewsAvg,
+        note: 'mostly the background sweep, not a request' },
+      { metric: 'AI spend', median: r.costMedian, average: r.costAvg, unit: 'usd',
+        note: "billed to each account's own OpenAI key" },
+      { metric: 'Sign-ins', median: r.signInsMedian, average: r.signInsAvg,
+        note: 'last 30 days — older sessions are deleted' },
+    ],
+  };
 }
 
 // Everything the panel shows, as one coherent picture of one moment.
@@ -219,11 +285,11 @@ async function stats() {
     funnel: await setupFunnel(q),
     engagement: await engagement(q),
     waitlist: await waitlist(q),
-    accounts: await accounts(q),
+    perAccount: await perAccount(q),
     generatedAt: new Date().toISOString(),
   }));
 }
 
 module.exports = {
-  stats, accountTotals, signupsByMonth, setupFunnel, engagement, waitlist, accounts,
+  stats, accountTotals, signupsByMonth, setupFunnel, engagement, waitlist, perAccount,
 };
