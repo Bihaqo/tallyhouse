@@ -37,6 +37,7 @@ const lunchflow = require('./src/lunchflow');
 const { PgSessionStore } = require('./src/pg-session-store');
 const { buildExport, applyImport } = require('./src/export');
 const sweepScheduler = require('./src/sweep-scheduler');
+const demo = require('./src/demo');
 const { info: buildInfo } = require('./src/build-info');
 
 const PORT = process.env.PORT || 3000;
@@ -123,6 +124,26 @@ app.use(
 );
 
 /**
+ * Keep a demo session sliding forward while it is being used.
+ *
+ * A demo account is deleted once no live session points at it, so the session's
+ * expiry is the account's lifetime, and a fixed one would delete the account
+ * out from under somebody who came back to it the next morning. Renewed only in
+ * the second half of its life rather than on every request: `rolling` is off
+ * for real sessions, so refreshing means an explicit write plus a Set-Cookie,
+ * and doing that per request would be a database write per page view for
+ * nothing. At most twice a day per demo, which is invisible.
+ */
+app.use((req, res, next) => {
+  const sess = req.session;
+  if (sess && sess.demo && sess.cookie && sess.cookie.maxAge < demo.DEMO_TTL_MS / 2) {
+    sess.cookie.maxAge = demo.DEMO_TTL_MS;
+    sess.slidAt = Date.now(); // a modification, so the session is saved and the cookie re-sent
+  }
+  next();
+});
+
+/**
  * Only the import carries a whole data export; nothing else needs the headroom,
  * and this parser is mounted before the general one so that route's body is left
  * alone by the 1MB limit.
@@ -199,6 +220,25 @@ const aiSpendLimiter = rateLimit({
 });
 
 const uid = (req) => req.session.userId;
+// Whether this request is being made by a demo account. Read from the session
+// rather than from src/demo.js so a route can answer it without a database
+// lookup; the two agree because the flag is written when the session is created
+// and a demo account is deleted with its session.
+const isDemoReq = (req) => Boolean(req.session && req.session.demo);
+
+/**
+ * Refuse the things a demo must not do.
+ *
+ * Storing a key would make an unauthenticated account start spending real
+ * money; joining the waiting list would write an address nobody verified; an
+ * import would put somebody's real finances into an account built to be
+ * deleted. Each is refused with the reason rather than a bare 403, because the
+ * person hitting it is mid-demo and the answer is "sign in", not "no".
+ */
+const refuseInDemo = (what) => (req, res, next) => {
+  if (!isDemoReq(req)) return next();
+  res.status(403).json({ error: `${what} in the demo — sign in with Google to set up a real account` });
+};
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
@@ -234,7 +274,15 @@ app.get('/api/auth-config', async (req, res) => {
     // callback says so instead.
     console.error('Capacity check failed:', err.message);
   }
-  res.json({ google: googleEnabled(), dev: devLoginEnabled(), atCapacity: full });
+  res.json({
+    google: googleEnabled(),
+    dev: devLoginEnabled(),
+    atCapacity: full,
+    // The demo is offered even when signups are paused: it creates no account
+    // anyone is kept out of, and someone who cannot sign up yet is exactly the
+    // person a demo is for.
+    demo: Boolean(demo.maxDemoAccounts()),
+  });
 });
 
 // The count itself, for whoever is signed in. Cheap, and it saves grepping the
@@ -253,7 +301,7 @@ function googleRedirectUri(req) {
 }
 
 // Establish the session for a user row and route them to onboarding or the app.
-function startSession(req, res, user, { json = false } = {}) {
+function startSession(req, res, user, { json = false, demo: isDemo = false } = {}) {
   req.session.regenerate((err) => {
     if (err) {
       if (json) return res.status(500).json({ error: 'Session error' });
@@ -262,6 +310,13 @@ function startSession(req, res, user, { json = false } = {}) {
     req.session.userId = user.id;
     req.session.email = user.email;
     req.session.onboarded = users.isOnboarded(user);
+    if (isDemo) {
+      // A demo lives exactly as long as its session, so this cookie *is* the
+      // account's lifetime — a day rather than the month a real sign-in gets,
+      // and slid forward on use by the middleware above.
+      req.session.demo = true;
+      req.session.cookie.maxAge = demo.DEMO_TTL_MS;
+    }
     req.session.save(() => {
       if (json) return res.json({ ok: true, onboarding: !req.session.onboarded });
       res.redirect(req.session.onboarded ? '/' : '/onboarding');
@@ -317,7 +372,7 @@ app.get('/auth/google/callback', loginLimiter, async (req, res) => {
  * session there is nothing to add, which keeps this from becoming an open
  * endpoint for writing arbitrary addresses into the table.
  */
-app.post('/api/waitlist', loginLimiter, async (req, res) => {
+app.post('/api/waitlist', loginLimiter, refuseInDemo('The waiting list cannot be joined'), async (req, res) => {
   const email = req.session && req.session.waitlistEmail;
   if (!email) return res.status(400).json({ error: 'Sign in first so we know where to reach you' });
   try {
@@ -326,6 +381,38 @@ app.post('/api/waitlist', loginLimiter, async (req, res) => {
   } catch (err) {
     console.error('Waiting list signup failed:', err.message);
     res.status(500).json({ error: 'Could not add you to the waiting list' });
+  }
+});
+
+/**
+ * Start a demo: a throwaway account on invented data, with no sign-in.
+ *
+ * Rate-limited with the login limiter because that is what this is — the one
+ * other way to get a session — and an unauthenticated endpoint that writes a
+ * row needs a ceiling that does not depend on anybody being honest. The cap in
+ * src/demo.js is the second one: the limiter bounds how fast demos can be made
+ * from one address, the cap bounds how many can exist at all.
+ *
+ * A visitor who already has a session gets sent to whatever it is: signing in
+ * and then clicking "demo" should not quietly replace a real account's session
+ * with a fake one.
+ */
+app.post('/api/demo', loginLimiter, async (req, res) => {
+  if (req.session && req.session.userId) {
+    return res.json({ ok: true, existing: true, onboarding: !req.session.onboarded });
+  }
+  if (!demo.maxDemoAccounts()) return res.status(404).json({ error: 'The demo is not available here' });
+  try {
+    const user = await demo.create();
+    if (!user) {
+      return res.status(503).json({
+        error: 'All the demo places are in use right now — try again in a few minutes',
+      });
+    }
+    startSession(req, res, user, { json: true, demo: true });
+  } catch (err) {
+    console.error('Could not start a demo:', err.message);
+    res.status(500).json({ error: 'Could not start the demo' });
   }
 });
 
@@ -355,14 +442,18 @@ app.get('/api/me', requireAuth, async (req, res) => {
   // Whether this account has an OpenAI key, so the app can leave the AI
   // controls off the page rather than offering buttons that answer 503. An
   // account can finish setup without one; Settings switches it on later.
-  let aiReview = gpt.usesMockReviews();
+  let aiReview = gpt.usesMockReviews(uid(req));
   if (!aiReview) {
     try {
       aiReview = await users.hasOpenAiKey(uid(req));
     } catch (_err) { /* the rest of this answer is still worth sending */ }
   }
   res.json({
-    email: req.session.email,
+    // A demo account's address is a generated `.invalid` name that exists only
+    // because the column is NOT NULL UNIQUE; showing it would be showing a
+    // stranger an identifier that means nothing and looks like an account.
+    email: isDemoReq(req) ? null : req.session.email,
+    demo: isDemoReq(req),
     onboarded: Boolean(req.session.onboarded),
     aiReview,
     // Only so the app can show the link. The panel guards itself.
@@ -670,7 +761,7 @@ function parseAiSettings(ai) {
  * either way, so switching it on then starts from the modest window setup
  * offered rather than the deployment-wide default.
  */
-app.post('/api/onboarding', requireAuth, keyLimiter, async (req, res) => {
+app.post('/api/onboarding', requireAuth, refuseInDemo('Setup cannot be run'), keyLimiter, async (req, res) => {
   const { lunchflow: lfKey, openai: oaKey, data, categories, currency, ai } = req.body || {};
   if (typeof lfKey !== 'string' || !lfKey.trim()) {
     return res.status(400).json({ error: 'Your Lunchflow API key is required' });
@@ -728,7 +819,7 @@ app.get('/api/keys', requireOnboarded, async (req, res) => {
  * paid for and they are the user's data. Only the OpenAI key can go; without a
  * Lunchflow key there is nothing to show at all.
  */
-app.post('/api/keys', requireOnboarded, keyLimiter, async (req, res) => {
+app.post('/api/keys', requireOnboarded, refuseInDemo('API keys cannot be stored'), keyLimiter, async (req, res) => {
   const patch = {};
   if (typeof req.body?.lunchflow === 'string' && req.body.lunchflow.trim()) patch.lunchflow = req.body.lunchflow.trim();
   if (typeof req.body?.openai === 'string' && req.body.openai.trim()) patch.openai = req.body.openai.trim();
@@ -978,6 +1069,7 @@ app.post('/api/account/delete', requireAuth, keyLimiter, async (req, res) => {
     forgetSummaryUser(id);
     forgetScan(id); // an abandoned setup leaves a merchant list behind it
     await users.deleteAccount(id);
+    demo.forget(id); // a no-op unless this was a demo
     // The session row is already gone with the account; this clears the cookie
     // and this process's copy so the next request is a clean signed-out one.
     req.session.destroy(() => res.json({ ok: true }));
@@ -1101,6 +1193,17 @@ async function start() {
   // default; SWEEP_INTERVAL_MINUTES=0 turns it off.
   const stopSweeps = sweepScheduler.start();
 
+  // Loads which accounts are demos and deletes the ones whose session is gone.
+  // The two cache clears are the same ones /api/account/delete makes: demo.js
+  // cannot require these modules itself without a cycle, since both of them ask
+  // it whether a user is a demo.
+  const stopDemoReaper = demo.start({
+    onDelete: (id) => {
+      gpt.forgetUser(id);
+      forgetSummaryUser(id);
+    },
+  });
+
   // Railway sends SIGTERM when replacing the container on a deploy; finish the
   // in-flight requests and exit 0. Sessions are already in Postgres.
   //
@@ -1116,6 +1219,7 @@ async function start() {
     process.on(signal, () => {
       console.log(`${signal} received, shutting down`);
       if (stopSweeps) stopSweeps();
+      if (stopDemoReaper) stopDemoReaper();
       server.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 5000).unref();
     });

@@ -24,6 +24,7 @@ const { classify, currentLabel, previewMatches, matchesAny, merchantSimilarity,
   accountLabels } = require('./analytics');
 const db = require('./db');
 const users = require('./users');
+const demo = require('./demo');
 
 // Stamped on every stored review so a verdict can be attributed to the prompt
 // that produced it. Bump when the prompt or review semantics change. Nothing is
@@ -67,7 +68,13 @@ const PRICE_WEB_SEARCH_PER_1K = Number(process.env.OPENAI_PRICE_WEB_SEARCH) || 1
 // OpenAI key or spend. MOCK_REVIEWS turns them on independently of MOCK_DATA,
 // which is what a staging copy wants: real transactions, no duplicated spend on
 // reviews production has already paid for.
-const useMockReviews = () => process.env.MOCK_DATA === '1' || process.env.MOCK_REVIEWS === '1';
+//
+// A demo account is on mock reviews individually, whatever the instance is set
+// to. That is not a convenience: the demo needs no sign-in, so an account that
+// could reach OpenAI would let anybody at all spend somebody's money by
+// clicking "review" — and there is no key on a demo account to spend anyway.
+const useMockReviews = (userId) =>
+  process.env.MOCK_DATA === '1' || process.env.MOCK_REVIEWS === '1' || demo.isDemo(userId);
 
 /**
  * The deployment's own OpenAI key, used for exactly one thing: the single
@@ -755,6 +762,21 @@ async function suggestCategoriesOnHostKey({ merchants, currency } = {}) {
 
 /* ---------- mock reviewer (MOCK_DATA mode, no API key) ---------- */
 
+/**
+ * The stand-in reviewer: verdicts with the right shape and no model behind
+ * them, so the review flows work without a key or a bill.
+ *
+ * Its wording is read by strangers now — the demo runs on this (see
+ * src/demo.js) — so it says what it is in words rather than naming the
+ * environment variable that switched it on. Saying "placeholder" plainly is the
+ * point: the demo can honestly show what a review *does* to a row without
+ * passing off a hard-coded sentence as a model's opinion.
+ *
+ * The outlier flag is the exception, and worth knowing: it is a real
+ * calculation over the real distribution of the account's own transactions
+ * (three standard deviations from that merchant's mean), so an outlier this
+ * finds is genuinely unusual rather than invented for the screenshot.
+ */
 function mockReview({ item, classified, categoryNames }) {
   const { tx } = item;
   const label = currentLabel(item);
@@ -768,16 +790,18 @@ function mockReview({ item, classified, categoryNames }) {
     assessment: unclassified ? 'unclassified' : wrongCategory ? 'wrong_category' : 'correct',
     suggested_category: unclassified ? categoryNames[0] || null : wrongCategory ? 'Home' : null,
     confidence: 0.5,
-    reasoning: 'Mock review (MOCK_DATA mode): deterministic placeholder for UI development.',
+    reasoning: 'Placeholder verdict — this account reviews without a model, so this is what a review looks like rather than what one concluded.',
     proposed_rule: unclassified && merchantWord ? { pattern: merchantWord, category: categoryNames[0] } : null,
     is_outlier: isOutlier,
-    outlier_reason: isOutlier ? 'Amount is unusual for this merchant (mock heuristic).' : null,
+    outlier_reason: isOutlier
+      ? 'Well outside what this merchant usually charges on this account — measured, not guessed.'
+      : null,
   };
 }
 
 /* ---------- public API ---------- */
 
-function normalizeResult(parsed, item, context, categoryNames) {
+function normalizeResult(parsed, item, context, categoryNames, { mocked = false } = {}) {
   const categories = new Set([...categoryNames, 'Other']);
   const suggested = categories.has(parsed.suggested_category) ? parsed.suggested_category : null;
   let rule = parsed.proposed_rule &&
@@ -801,7 +825,7 @@ function normalizeResult(parsed, item, context, categoryNames) {
     txId: String(item.tx.id),
     at: new Date().toISOString(),
     promptVersion: PROMPT_VERSION,
-    model: useMockReviews() ? 'mock' : MODEL,
+    model: mocked ? 'mock' : MODEL,
     reviewedCategory: currentLabel(item),
     assessment: manualCategory ? 'correct' : parsed.assessment,
     suggestedCategory: parsed.assessment === 'correct' || manualCategory ? null : suggested,
@@ -833,7 +857,7 @@ async function review(userId, txId, { force = false } = {}) {
   if (inflight.has(id)) return inflight.get(id);
 
   let apiKey = null;
-  if (!useMockReviews()) {
+  if (!useMockReviews(userId)) {
     apiKey = (await users.getKeys(userId)).openai;
     if (!apiKey) {
       const err = new Error('OpenAI key is not set');
@@ -860,7 +884,7 @@ async function review(userId, txId, { force = false } = {}) {
     const accountName = accountLabels(accounts, txs);
 
     let parsed;
-    if (useMockReviews()) {
+    if (useMockReviews(userId)) {
       parsed = mockReview({ item, classified, categoryNames });
     } else {
       const webSearch = rules.webSearchOf(rulesDoc);
@@ -887,7 +911,8 @@ async function review(userId, txId, { force = false } = {}) {
       parsed = outcome.parsed;
       await recordReviewUsage(userId, outcome.usage);
     }
-    const result = normalizeResult(parsed, item, { accounts, txs, overrides: ovr, rulesDoc }, categoryNames);
+    const result = normalizeResult(parsed, item, { accounts, txs, overrides: ovr, rulesDoc }, categoryNames,
+      { mocked: useMockReviews(userId) });
     // A re-review must not resurface an outlier a human already looked at.
     const prev = await getReview(userId, id);
     if (prev && prev.outlierReviewed) result.outlierReviewed = true;
@@ -1002,7 +1027,7 @@ async function sweep(userId) {
   if (isForgotten(userId)) return sweepStatus(userId);
   const sweepState = sweepStateFor(userId);
   if (sweepState.running) return sweepStatus(userId);
-  if (!useMockReviews()) {
+  if (!useMockReviews(userId)) {
     const openai = (await users.getKeys(userId)).openai;
     if (!openai) {
       const err = new Error('OpenAI key is not set');

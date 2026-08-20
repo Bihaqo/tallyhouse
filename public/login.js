@@ -9,6 +9,9 @@ const closedNotice = document.getElementById('closed-notice');
 const closedText = document.getElementById('closed-text');
 const waitlistJoin = document.getElementById('waitlist-join');
 const waitlistStatus = document.getElementById('waitlist-status');
+const demoOffer = document.getElementById('demo-offer');
+const demoStart = document.getElementById('demo-start');
+const demoStatus = document.getElementById('demo-status');
 
 const PAUSED_NOTE = 'New registrations are paused for now. If you already have an account, you can still sign in.';
 
@@ -47,6 +50,11 @@ fetch('/api/auth-config')
     // "This creates your account" is the wrong promise to make while new
     // accounts are being refused; the capacity note above says the true thing.
     signinNote.hidden = !cfg.google || full;
+    // Offered whether or not signups are open: it makes no account anybody else
+    // is waiting for, and someone the cap just turned away is exactly who wants
+    // to see the thing before joining a list for it.
+    demoOffer.hidden = !cfg.demo;
+    demoStart.hidden = !cfg.demo;
   })
   .catch(() => {
     devForm.hidden = false; // fall back to the dev form if the probe fails
@@ -68,6 +76,29 @@ waitlistJoin.addEventListener('click', async () => {
   } catch {
     waitlistStatus.textContent = 'Network error';
     waitlistJoin.disabled = false;
+  }
+});
+
+// The demo: one POST, then straight into a working dashboard. No form, because
+// there is nothing to ask for — that is the whole pitch.
+demoStart.addEventListener('click', async () => {
+  demoStart.disabled = true;
+  demoStatus.hidden = false;
+  demoStatus.textContent = 'Making you a demo account…';
+  try {
+    const res = await fetch('/api/demo', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      location.href = body.onboarding ? '/onboarding' : '/';
+      return;
+    }
+    // Worth saying plainly rather than as an error: every demo place being
+    // taken is a queue, not a fault, and it clears itself.
+    demoStatus.textContent = body.error || 'Could not start the demo';
+    demoStart.disabled = false;
+  } catch {
+    demoStatus.textContent = 'Network error';
+    demoStart.disabled = false;
   }
 });
 

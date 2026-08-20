@@ -16,6 +16,20 @@ tracked, nothing is sold, and access to your bank is read-only.
 
 ## What it does
 
+- **A demo that needs no sign-in** — "Try the demo" on the sign-in page makes a
+  real account on invented data and drops you straight into the dashboard: a year
+  of generated transactions across three fictional banks, sorted into categories,
+  with the trackers, the charts and the AI review all live. It is a *real*
+  account, not a slideshow — classify by hand, write rules, rename categories,
+  change the currency, all of it saved and all of it yours until it goes. What
+  the flag changes is only where the data comes from and what may be spent: the
+  transactions come from `src/mock.js` instead of Lunchflow, the review runs on
+  the deterministic stand-in reviewer instead of OpenAI, and storing an API key,
+  joining the waiting list and importing an export are all refused. A demo lives
+  as long as its session — a day, sliding on use — and is deleted, with
+  everything it owned, once no live session points at it. It never counts against
+  `MAX_USERS` and never appears in the admin panel, because a click is not a
+  signup. `MAX_DEMO_ACCOUNTS=0` removes it.
 - **Sign in with Google** — any Google account can sign up, and the button says
   "Continue with Google" with a line under it saying that this *is* the sign-up:
   there is no separate registration, and "Sign in" reads as members-only to
@@ -212,6 +226,7 @@ and pays for nothing but the single category suggestion offered during setup.
 | `PGSSL` | no | `disable` to connect to a local Postgres without TLS (in production TLS is used with a relaxed chain) |
 | `PG_POOL_MAX` | no | Maximum Postgres connections in the pool, default 10 |
 | `LUNCHFLOW_BASE_URL` | no | Alternative Lunchflow API base URL |
+| `MAX_DEMO_ACCOUNTS` | no | How many signed-out demo accounts may exist at once, default 25. `0` removes the demo entirely — no button, and `/api/demo` answers 404 |
 | `SOURCE_REPO_URL` | no | Where the footer's commit link points. Defaults to the GitHub repo Railway deployed from, which is the honest answer for a fork; set it for a source Railway can't name (a mirror), or set it **empty** to print the commit without linking it |
 | `PORT` | no | Provided by Railway; defaults to 3000 locally |
 | `CACHE_TTL_MINUTES` | no | How long a Lunchflow pull counts as fresh, default 15 minutes |

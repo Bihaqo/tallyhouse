@@ -5,6 +5,7 @@ const overrides = require('./overrides');
 const { applyExchangeRates } = require('./fx');
 const rules = require('./rules');
 const users = require('./users');
+const demo = require('./demo');
 const db = require('./db');
 
 const mock = require('./mock');
@@ -26,7 +27,11 @@ function staleServeMinutes() {
   return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 const STALE_SERVE_MS = staleServeMinutes() * 60 * 1000;
-const useMock = () => process.env.MOCK_DATA === '1';
+// MOCK_DATA=1 puts the whole instance on generated data; a demo account is on
+// it individually, on an instance whose other accounts are reading real banks
+// (see src/demo.js). Both answer the same question — "is there a bank behind
+// this account?" — so they are the same switch.
+const useMock = (userId) => process.env.MOCK_DATA === '1' || demo.isDemo(userId);
 
 // Per-user in-memory cache of the raw Lunchflow pull. Summaries and per-month
 // lists are derived from it on each request, so manual overrides take effect
@@ -63,9 +68,9 @@ function iso(d) {
 }
 
 async function fetchRaw(userId) {
-  const api = useMock() ? mock : lunchflow;
+  const api = useMock(userId) ? mock : lunchflow;
   let apiKey = null;
-  if (!useMock()) {
+  if (!useMock(userId)) {
     apiKey = (await users.getKeys(userId)).lunchflow;
     if (!apiKey) {
       const err = new Error('No Lunchflow API key on file');

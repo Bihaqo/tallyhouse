@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- their own. Null until it does: the column is the whole enforcement of "once
   -- per account", so somebody else's bill cannot be run up by reloading setup.
   hosted_suggest_at TIMESTAMPTZ,
+  -- A signed-out demo account: invented data, no keys, deleted once no live
+  -- session points at it (see src/demo.js). Kept on `users` rather than in a
+  -- table of its own so a demo is a normal account to every query that does not
+  -- care — and so the ones that do care (the signup cap, the admin panel) opt
+  -- out explicitly and visibly.
+  is_demo       BOOLEAN NOT NULL DEFAULT false,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -22,6 +28,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- before the column gets it on the next boot. Additive and idempotent, like the
 -- CREATE TABLEs above: a rollback simply stops reading it.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS hosted_suggest_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS users_demo_idx ON users (is_demo) WHERE is_demo;
 
 -- One editable rules document per user (same shape as config/settings.json).
 CREATE TABLE IF NOT EXISTS rules (
@@ -83,3 +92,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   expire TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS user_sessions_expire_idx ON user_sessions (expire);
+
+-- The demo reaper asks "which demo accounts have no live session?" every
+-- fifteen minutes, and the lookup inside it is by the user id buried in the
+-- session document, which no index on `sid` or `expire` can help with. Declared
+-- here rather than beside the users table above because the table it indexes is
+-- created further down this file, and this runs as one script in order.
+CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions ((sess->>'userId'));

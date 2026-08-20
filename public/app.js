@@ -1732,10 +1732,20 @@ async function loadMe() {
     aiReview = me.aiReview !== false;
     if (aiReview !== was) repaintAiCells();
     syncAiCards();
+    syncDemo(Boolean(me.demo));
     return me;
   } catch (_err) {
     return null; // the app works either way; the AI controls just stay as they are
   }
+}
+
+// A demo says so at the top of the page and swaps the key form for the reason
+// it has none. Everything else on the page is deliberately identical: the point
+// of the demo is that it behaves like the real thing.
+function syncDemo(demo) {
+  $('demo-banner').hidden = !demo;
+  $('api-keys-card').hidden = demo;
+  $('demo-keys-card').hidden = !demo;
 }
 
 // The two settings cards that only mean something with a key: the spend total

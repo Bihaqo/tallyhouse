@@ -84,7 +84,7 @@ async function accountTotals(q = db) {
            count(*) FILTER (WHERE onboarded_at IS NOT NULL)::int AS onboarded,
            count(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS new7d,
            count(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS new30d
-    FROM users
+    FROM users WHERE NOT is_demo
   `);
   return rows[0];
 }
@@ -98,7 +98,7 @@ async function signupsByMonth(q = db) {
       date_trunc('month', now()),
       interval '1 month'
     ) AS m
-    LEFT JOIN users u ON date_trunc('month', u.created_at) = m
+    LEFT JOIN users u ON date_trunc('month', u.created_at) = m AND NOT u.is_demo
     GROUP BY m ORDER BY m
   `);
   return rows;
@@ -129,12 +129,14 @@ async function setupFunnel(q = db) {
     FROM users u
     LEFT JOIN transactions_cache tc ON tc.user_id = u.id
     LEFT JOIN ai_usage au ON au.user_id = u.id
+    WHERE NOT u.is_demo
   `);
   const { rows: returned } = await q.query(`
     SELECT count(DISTINCT (${SESSION_USER})::bigint)::int AS n
     FROM user_sessions s
     JOIN users u ON u.id = (${SESSION_USER})::bigint
     WHERE ${SESSION_OF_USER}
+      AND NOT u.is_demo
       AND u.onboarded_at IS NOT NULL
       AND ${SESSION_START} > u.onboarded_at + interval '1 day'
   `);
@@ -160,17 +162,25 @@ async function engagement(q = db) {
     SELECT count(*)::int AS "signIns30d",
            count(DISTINCT (${SESSION_USER}))::int AS "accountsSeen30d",
            count(*) FILTER (WHERE ${SESSION_START} > now() - interval '7 days')::int AS "signIns7d"
-    FROM user_sessions WHERE ${SESSION_OF_USER}
+    FROM user_sessions s JOIN users u ON u.id = (${SESSION_USER})::bigint
+    WHERE ${SESSION_OF_USER} AND NOT u.is_demo
   `);
+  // Every count here joins users to drop demo accounts. A demo classifies and
+  // reviews exactly as a real account does — that is the point of it — so
+  // without the join a busy afternoon of visitors would read as engagement.
   const { rows: work } = await q.query(`
-    SELECT (SELECT count(*)::int FROM overrides) AS overrides,
-           (SELECT count(DISTINCT user_id)::int FROM overrides) AS "accountsClassifying",
-           (SELECT count(*)::int FROM ai_reviews) AS reviews
+    SELECT (SELECT count(*)::int FROM overrides o
+              JOIN users u ON u.id = o.user_id AND NOT u.is_demo) AS overrides,
+           (SELECT count(DISTINCT o.user_id)::int FROM overrides o
+              JOIN users u ON u.id = o.user_id AND NOT u.is_demo) AS "accountsClassifying",
+           (SELECT count(*)::int FROM ai_reviews r
+              JOIN users u ON u.id = r.user_id AND NOT u.is_demo) AS reviews
   `);
   const { rows: spend } = await q.query(`
     SELECT coalesce(sum((stats->>'costUsd')::numeric), 0)::float AS "costUsd",
            coalesce(sum((stats->>'totalReviews')::numeric), 0)::int AS "totalReviews"
-    FROM ai_usage
+    FROM ai_usage au JOIN users u ON u.id = au.user_id
+    WHERE NOT u.is_demo
   `);
   return { ...rows[0], ...work[0], ...spend[0] };
 }
@@ -232,7 +242,7 @@ async function perAccount(q = db) {
                max(${SESSION_START}) AS last_sign_in
         FROM user_sessions WHERE ${SESSION_OF_USER} GROUP BY 1
       ) s ON s.user_id = u.id
-      WHERE u.onboarded_at IS NOT NULL
+      WHERE u.onboarded_at IS NOT NULL AND NOT u.is_demo
     )
     SELECT count(*)::int AS accounts,
            count(*) FILTER (WHERE has_openai)::int AS "withOpenai",

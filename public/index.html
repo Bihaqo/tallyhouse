@@ -24,6 +24,17 @@
       <button id="logout">Log out</button>
     </header>
 
+    <!-- Shown only to a demo account. It says the two things a visitor needs to
+         know and neither can guess: none of this is real, and none of it is
+         kept. Signing in goes straight to Google — the demo session is replaced
+         there, and the account it leaves behind is deleted within the hour. -->
+    <div class="demo-banner" id="demo-banner" hidden>
+      <span><strong>This is the demo.</strong> The accounts, the transactions and the merchants are
+        invented, and everything you change here — categories, rules, classifications — is deleted
+        with the session. Nothing is connected to a bank.</span>
+      <a class="btn" href="/auth/google">Set up a real account</a>
+    </div>
+
     <div id="dashboard">
     <div class="err" id="err"></div>
 
@@ -140,6 +151,15 @@
         <span class="meta">stored as data, editable live</span>
       </div>
       <div class="err" id="settings-err"></div>
+      <!-- The demo has no keys and may not store any, so the card would be two
+           fields that answer 403. What replaces it says why. -->
+      <section class="card" id="demo-keys-card" hidden>
+        <h2>API keys</h2>
+        <p class="sub">A demo account has none, and cannot store any — that is what keeps it free to
+          run and safe to hand to a stranger. The transactions you are looking at come from a
+          generator, and the AI review is a stand-in that never reaches OpenAI.
+          <a href="/auth/google">Set up a real account</a> to connect a bank with your own keys.</p>
+      </section>
       <section class="card" id="api-keys-card">
         <h2>API keys</h2>
         <p class="sub">Your Lunchflow and OpenAI keys, encrypted at rest. Leave a field blank to keep the

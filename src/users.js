@@ -27,8 +27,12 @@ function maxUsers() {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
 }
 
+// Real accounts only. A demo account is a row in this table (see src/demo.js)
+// but it is not a signup: it was created by clicking a button, it holds
+// invented data, and it deletes itself. Counting one against the cap would let
+// passers-by fill an instance that has room for the people it is actually for.
 async function countUsers() {
-  const { rows } = await db.query('SELECT count(*)::int AS n FROM users');
+  const { rows } = await db.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
   return rows[0].n;
 }
 
@@ -96,7 +100,7 @@ async function upsertByGoogle({ sub, email }) {
     await client.query('SELECT pg_advisory_xact_lock($1)', [SIGNUP_LOCK_KEY]);
     const cap = maxUsers();
     if (cap > 0) {
-      const { rows } = await client.query('SELECT count(*)::int AS n FROM users');
+      const { rows } = await client.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
       if (rows[0].n >= cap) {
         await client.query('COMMIT');
         console.warn(`Signup refused: at the ${cap}-account cap — offering the waiting list to ${normalized}`);
@@ -110,7 +114,7 @@ async function upsertByGoogle({ sub, email }) {
        RETURNING *`,
       [normalized, googleSub]
     );
-    const { rows: totals } = await client.query('SELECT count(*)::int AS n FROM users');
+    const { rows: totals } = await client.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
     await client.query('COMMIT');
     announceSignup(totals[0].n, cap);
     return created.rows[0];
@@ -261,8 +265,14 @@ const isOnboarded = (user) => Boolean(user && user.onboarded_at);
 // first — who the background sweep should review for. Filtering in SQL keeps
 // the scheduler from decrypting keys just to discover there are none.
 async function onboardedWithOpenAiKey() {
+  // A demo account has no key, so `openai_key IS NOT NULL` already excludes it.
+  // Named here anyway because the sweep is the one loop that spends money on a
+  // schedule, and a later change to how demo reviews work must not be able to
+  // put an unauthenticated account into it by accident.
   const { rows } = await db.query(
-    'SELECT id FROM users WHERE onboarded_at IS NOT NULL AND openai_key IS NOT NULL ORDER BY id'
+    `SELECT id FROM users
+     WHERE onboarded_at IS NOT NULL AND openai_key IS NOT NULL AND NOT is_demo
+     ORDER BY id`
   );
   return rows.map((r) => r.id);
 }

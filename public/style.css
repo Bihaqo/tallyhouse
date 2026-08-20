@@ -199,6 +199,38 @@ table.cats td:first-child { text-align: left; color: var(--text-secondary); }
 table.cats tr:last-child td { border-bottom: none; }
 table.cats tr.providers-total td { font-weight: 650; border-top: 1px solid var(--baseline); color: var(--text-primary); }
 
+/* The demo notice above the dashboard. Tinted with the "tracked separately"
+   accent rather than the danger red: nothing is wrong, the numbers are simply
+   not real, and a red bar over invented data reads as a broken account. */
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-renovation);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-renovation) 8%, var(--surface));
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.demo-banner[hidden] { display: none; }
+.demo-banner span { flex: 1 1 320px; }
+.demo-banner .btn { flex: 0 0 auto; }
+/* The demo button, under the sign-in it is an alternative to: same shape, no
+   fill, so the page reads as one primary action and one lighter one. */
+.login-card .demo-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.login-card .demo-btn[hidden] { display: none; }
+
 .err {
   color: var(--danger);
   font-size: 13.5px;
