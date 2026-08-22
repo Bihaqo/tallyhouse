@@ -67,17 +67,27 @@ tracked, nothing is sold, and access to your bank is read-only.
   re-pulls the bank. Each key field has a **?** that expands to say what the
   service is, what it costs, and the steps to get a key from it. Keys can be
   rotated later from **Settings → API keys**.
-- **Capped signups with a waiting list** — the instance creates at most `MAX_USERS`
-  accounts (default 20). The cap applies at first sign-in, never to an existing
-  account, so nobody who already has data here can be locked out by it. Someone
-  turned away lands back on the sign-in page with an explanation and a one-click
+- **Capped signups with a waiting list** — at most `MAX_USERS` accounts
+  (default 20) may **finish setup**. What the cap rations is this process's
+  memory — a place costs a cached transaction pull and an hourly visit from the
+  sweep — and none of that exists until an account has keys and data, so someone
+  who signed in with Google and never came back holds no place. Rows in `users`
+  can therefore exceed the cap, and are expected to; the cap is not a limit on
+  sign-ins. It is checked in two places: at first sign-in, so anyone with no hope
+  of getting in is turned away at the door rather than after filling in a whole
+  setup, and again when setup completes, which is where the place is actually
+  taken and where an advisory lock makes count-then-mark atomic so two people
+  finishing together cannot both take the last one. An existing account is never
+  affected. Someone turned away — at the door or, more rarely, at the last step
+  because the last place went while they were setting up — gets a one-click
   **Join the waiting list**; the address is the one Google just verified, so
   `POST /api/waitlist` takes no input and cannot be used to enter anyone else's.
-  Count-then-insert is serialized by an advisory lock, so two people arriving
-  together cannot both take the last place. There is no mail transport, so the
-  signal is the log: a line per new account, escalated to `WARN` at 80% of the cap
-  and again when it is reached, plus one when someone joins the list.
-  `GET /api/capacity` (signed in) returns `{ users, cap, waiting }`.
+  A setup refused this way keeps its keys and categories, so finishing later
+  when a place frees up repeats nothing. There is no mail transport, so the
+  signal is the log: a line when an account finishes setup, escalated to `WARN`
+  at 80% of the cap and again when it is reached, plus one when someone joins
+  the list. `GET /api/capacity` (signed in) returns `{ users, cap, waiting }`,
+  where `users` is the number of finished accounts.
 - **Monthly spending bar chart** — last 12 months across all accounts.
 - **Category donuts** — this month vs the monthly average over the last 12 full
   months, with a full table below.
@@ -221,7 +231,7 @@ and pays for nothing but the single category suggestion offered during setup.
 | `GOOGLE_CLIENT_ID` | yes‡ | OAuth client id — enables "Sign in with Google" |
 | `GOOGLE_CLIENT_SECRET` | yes‡ | OAuth client secret (pairs with the id) |
 | `GOOGLE_REDIRECT_URI` | no | Override the callback URL; defaults to `<origin>/auth/google/callback` (must be registered on the OAuth client) |
-| `MAX_USERS` | no | How many accounts this instance will create, default 20. Only refuses *new* sign-ins; existing accounts always get in. `0` means no limit |
+| `MAX_USERS` | no | How many accounts may **finish setup**, default 20. Accounts that signed in and never set up hold no place, since the memory a place costs is only spent once an account has data. Existing accounts always get in. `0` means no limit |
 | `ADMIN_EMAILS` | no | Comma-separated addresses that may open `/admin`. Unset means nobody, so the panel is off unless it is switched on deliberately. Everyone else gets a 404 from both the page and its API |
 | `PGSSL` | no | `disable` to connect to a local Postgres without TLS (in production TLS is used with a relaxed chain) |
 | `PG_POOL_MAX` | no | Maximum Postgres connections in the pool, default 10 |

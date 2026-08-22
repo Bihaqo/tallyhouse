@@ -26,6 +26,14 @@
 
       <div class="err" id="err"></div>
 
+      <!-- Shown only if the last place went while this setup was being filled
+           in. The address is the one Google verified, already in the session,
+           so there is nothing to type here either. -->
+      <section id="full-notice" hidden>
+        <button class="primary" id="waitlist-join" type="button">Join the waiting list</button>
+        <p class="field-hint" id="waitlist-status"></p>
+      </section>
+
       <!-- Step 1: the Lunchflow key, and an optional export to seed from. -->
       <form id="step-connect" autocomplete="off">
         <p class="onboarding-intro">Connect your bank first. Your key is encrypted and only used to

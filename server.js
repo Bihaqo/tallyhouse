@@ -240,6 +240,25 @@ const refuseInDemo = (what) => (req, res, next) => {
   res.status(403).json({ error: `${what} in the demo — sign in with Google to set up a real account` });
 };
 
+/**
+ * The answer to someone who finished setup with nowhere to put them.
+ *
+ * The cap counts accounts that finished setup, so it is possible to sign in
+ * while there is room and reach the end of setup after the last place has gone.
+ * Rare, and worth handling properly rather than with a bare error: the address
+ * Google verified is already in the session, so the waiting list is one click
+ * away and `full` tells the page to offer it.
+ */
+function atCapacityAnswer(req) {
+  req.session.waitlistEmail = req.session.email;
+  return {
+    full: true,
+    error: 'This instance is full — every place is taken by an account that has finished setup.'
+      + ' Your keys and categories are saved, so joining the waiting list is all that is left to do;'
+      + ' setup will finish where it stopped once a place opens up.',
+  };
+}
+
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 /**
@@ -770,6 +789,13 @@ app.post('/api/onboarding', requireAuth, refuseInDemo('Setup cannot be run'), ke
   const { settings: aiSettings, error: aiError } = parseAiSettings(ai);
   if (aiError) return res.status(400).json({ error: aiError });
   try {
+    // Asked before anything is stored or validated, so a full instance refuses
+    // at the start rather than after taking somebody's API key and spending a
+    // round-trip checking it. This is the courteous check, not the enforcing
+    // one — claimAccountPlace below is what actually holds under a race.
+    if (!users.isOnboarded(await users.byId(uid(req))) && (await users.atCapacity())) {
+      return res.status(403).json(atCapacityAnswer(req));
+    }
     const invalid = await validateKeys({
       lunchflow: lfKey.trim(),
       ...(openai ? { openai } : {}),
@@ -793,8 +819,16 @@ app.post('/api/onboarding', requireAuth, refuseInDemo('Setup cannot be run'), ke
       : await rules.get(uid(req));
     const saved = await rules.replace(uid(req), rules.withAiSettings(base, aiSettings));
     if (saved.error) return res.status(400).json({ error: `Category list rejected: ${saved.error}` });
+    // The place is taken here, at the end, because everything above can still
+    // fail and an account marked as finished without keys is worse than one
+    // that has to try again. If the last place went to somebody else while this
+    // request was validating keys, the answer is the waiting list — the keys
+    // and categories just written stay on the account, so finishing later when
+    // a place frees up costs nothing to redo.
+    if (!(await users.claimAccountPlace(uid(req)))) {
+      return res.status(403).json(atCapacityAnswer(req));
+    }
     forgetScan(uid(req)); // setup is over; the merchant list has served its purpose
-    await users.markOnboarded(uid(req));
     req.session.onboarded = true;
     req.session.save(() => res.json({ ok: true }));
   } catch (err) {

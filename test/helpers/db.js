@@ -13,6 +13,13 @@ if (url) {
   if (!process.env.PGSSL) process.env.PGSSL = 'disable';
 }
 
+// The cap now counts accounts that finished setup, and every test file that
+// onboards adds one to the same throwaway database — so with the shipped
+// default of 20 the suite starts refusing its own setup calls partway through,
+// which looks like a broken route rather than a full instance. Uncapped by
+// default here; the files that are *about* the cap set their own value.
+if (process.env.MAX_USERS === undefined) process.env.MAX_USERS = '0';
+
 const dbAvailable = Boolean(url);
 const skip = dbAvailable ? false : 'set TEST_DATABASE_URL to run the Postgres-backed tests';
 

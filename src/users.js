@@ -27,17 +27,30 @@ function maxUsers() {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
 }
 
-// Real accounts only. A demo account is a row in this table (see src/demo.js)
-// but it is not a signup: it was created by clicking a button, it holds
-// invented data, and it deletes itself. Counting one against the cap would let
-// passers-by fill an instance that has room for the people it is actually for.
+/**
+ * How many accounts are using a place.
+ *
+ * Only accounts that finished setup, and never demo accounts. Both exclusions
+ * follow from what the cap is actually rationing, which is this process's
+ * memory: a place costs a cached transaction pull in src/summary.js and an
+ * hourly visit from the sweep, and neither exists until an account has keys and
+ * data. Someone who signed in with Google and never came back holds no memory
+ * at all, so counting them would refuse a real user on behalf of a row that
+ * costs nothing. A demo account is excluded for a different reason — it deletes
+ * itself, and a passer-by should not be able to fill an instance.
+ *
+ * The consequence to keep in mind: rows in `users` can exceed the cap, and are
+ * expected to. The cap is not a limit on sign-ins.
+ */
 async function countUsers() {
-  const { rows } = await db.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
+  const { rows } = await db.query(
+    'SELECT count(*)::int AS n FROM users WHERE onboarded_at IS NOT NULL AND NOT is_demo'
+  );
   return rows[0].n;
 }
 
-// Whether a *new* account can still be created. Existing accounts are never
-// affected by the cap, so this only ever gates first-time sign-in.
+// Whether another account can still finish setup. Accounts that already have a
+// place are never affected — the cap only ever refuses someone new.
 async function atCapacity() {
   const cap = maxUsers();
   return cap > 0 && (await countUsers()) >= cap;
@@ -60,10 +73,10 @@ const SIGNUP_LOCK_KEY = 727275;
 const APPROACHING_FRACTION = 0.8;
 function announceSignup(total, cap) {
   if (!cap) {
-    console.log(`Account created (${total} total, no cap set)`);
+    console.log(`Account set up (${total} total, no cap set)`);
     return;
   }
-  const line = `Account created (${total}/${cap})`;
+  const line = `Account set up (${total}/${cap})`;
   if (total >= cap) {
     console.warn(`${line} — SIGNUP CAP REACHED, further sign-ups now go to the waiting list`);
   } else if (total >= Math.ceil(cap * APPROACHING_FRACTION)) {
@@ -100,10 +113,12 @@ async function upsertByGoogle({ sub, email }) {
     await client.query('SELECT pg_advisory_xact_lock($1)', [SIGNUP_LOCK_KEY]);
     const cap = maxUsers();
     if (cap > 0) {
-      const { rows } = await client.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
+      const { rows } = await client.query(
+        'SELECT count(*)::int AS n FROM users WHERE onboarded_at IS NOT NULL AND NOT is_demo'
+      );
       if (rows[0].n >= cap) {
         await client.query('COMMIT');
-        console.warn(`Signup refused: at the ${cap}-account cap — offering the waiting list to ${normalized}`);
+        console.warn(`Sign-in refused: at the ${cap}-account cap — offering the waiting list to ${normalized}`);
         return null;
       }
     }
@@ -114,9 +129,10 @@ async function upsertByGoogle({ sub, email }) {
        RETURNING *`,
       [normalized, googleSub]
     );
-    const { rows: totals } = await client.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
     await client.query('COMMIT');
-    announceSignup(totals[0].n, cap);
+    // Not announceSignup: no place has been taken yet. Setup is where that
+    // happens, and where the cap is counted, so that is where the log escalates.
+    console.log('New account created — not set up yet');
     return created.rows[0];
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -259,6 +275,65 @@ function markOnboarded(id) {
   return db.query('UPDATE users SET onboarded_at = now() WHERE id = $1', [id]);
 }
 
+/**
+ * Take a place under the cap by finishing setup. Returns true when the account
+ * has one, false when the instance is full.
+ *
+ * This is the enforcement point, not the sign-in check. A place costs memory
+ * and it is finishing setup that spends it, so the count and the mark have to
+ * happen together: without the lock, two people submitting setup at the same
+ * moment both read "one place left" and both take it — the same race the signup
+ * lock guards at account creation, moved to where the resource now is. The same
+ * lock key is reused deliberately, because the two are counting the same thing.
+ *
+ * Idempotent for an account that already finished. Setup is a page that can be
+ * submitted twice (a retry, a double click), and the second submission must not
+ * be told the instance is full when the account it belongs to is already in.
+ */
+async function claimAccountPlace(id) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: existing } = await client.query(
+      'SELECT onboarded_at, is_demo FROM users WHERE id = $1', [id]
+    );
+    if (!existing.length) {
+      await client.query('COMMIT');
+      return false;
+    }
+    if (existing[0].onboarded_at) {
+      await client.query('COMMIT');
+      return true; // already has its place; nothing to count
+    }
+
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SIGNUP_LOCK_KEY]);
+    const cap = maxUsers();
+    let total = null;
+    if (cap > 0) {
+      const { rows } = await client.query(
+        'SELECT count(*)::int AS n FROM users WHERE onboarded_at IS NOT NULL AND NOT is_demo'
+      );
+      if (rows[0].n >= cap) {
+        await client.query('COMMIT');
+        console.warn(`Setup refused: at the ${cap}-account cap`);
+        return false;
+      }
+      total = rows[0].n + 1;
+    }
+    await client.query('UPDATE users SET onboarded_at = now() WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    if (!existing[0].is_demo) {
+      announceSignup(total === null ? await countUsers() : total, cap);
+    }
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 const isOnboarded = (user) => Boolean(user && user.onboarded_at);
 
 // Ids of every account that finished onboarding and has an OpenAI key, oldest
@@ -279,6 +354,7 @@ async function onboardedWithOpenAiKey() {
 
 module.exports = {
   upsertByGoogle, upsertByEmail, byId, setKeys, getKeys, hasOpenAiKey, markOnboarded, isOnboarded,
+  claimAccountPlace,
   onboardedWithOpenAiKey, deleteAccount,
   claimHostedSuggestion, releaseHostedSuggestion, hostedSuggestionUsed,
   maxUsers, countUsers, atCapacity, addToWaitlist, waitingCount,

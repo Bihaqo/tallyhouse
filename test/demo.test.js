@@ -174,12 +174,20 @@ test('demo accounts are absent from every figure in the admin panel', { skip }, 
 
   const admin = require('../src/admin');
   const stats = await admin.stats();
-  const totals = await users.countUsers();
-  assert.equal(stats.totals.total, totals, 'the headline count is real accounts only');
-  assert.equal(stats.funnel.find((s) => s.step === 'Signed in').count, totals);
+
+  // Deliberately not compared against users.countUsers(): that counts accounts
+  // that finished setup, because it answers "how full is the instance?", while
+  // the panel's headline counts every real account including the ones that
+  // stopped halfway. Both exclude demos, which is what this test is about.
+  const { rows } = await h.query('SELECT count(*)::int AS n FROM users WHERE NOT is_demo');
+  assert.equal(stats.totals.total, rows[0].n, 'the headline count is real accounts only');
+  assert.equal(stats.funnel.find((s) => s.step === 'Signed in').count, rows[0].n);
+
   // A demo is onboarded at creation, so it would otherwise inflate exactly the
   // number an operator reads as "people who got through setup".
-  assert.ok(stats.perAccount.accounts <= totals);
+  assert.equal(stats.totals.onboarded, await users.countUsers(),
+    'and the finished count is the same one the cap uses');
+  assert.equal(stats.perAccount.accounts, await users.countUsers());
 });
 
 /* ---------- how a demo ends ---------- */

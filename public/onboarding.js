@@ -105,8 +105,34 @@ async function finish(body) {
   if (res.status === 401) return (location.href = '/login');
   const parsed = await res.json().catch(() => ({}));
   if (res.ok) return (location.href = '/');
+  // The instance filled up while this was being filled in. Everything typed is
+  // already saved, so the only thing left to offer is the waiting list.
+  if (parsed.full) document.getElementById('full-notice').hidden = false;
   throw new Error(parsed.error || 'Setup failed');
 }
+
+// Same endpoint and same one-click shape as the sign-in page's offer: it takes
+// no input at all, because the address is the one Google verified.
+document.getElementById('waitlist-join').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const status = document.getElementById('waitlist-status');
+  button.disabled = true;
+  status.textContent = '';
+  try {
+    const res = await fetch('/api/waitlist', { method: 'POST' });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      status.textContent = `Thanks — ${body.email} is on the list. We will be in touch when a place opens up.`;
+      button.hidden = true;
+      return;
+    }
+    status.textContent = body.error || 'Could not add you to the list';
+    button.disabled = false;
+  } catch {
+    status.textContent = 'Network error';
+    button.disabled = false;
+  }
+});
 
 /* ---------- step 1: connect ---------- */
 
