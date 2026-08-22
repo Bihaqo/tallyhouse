@@ -183,6 +183,99 @@ function renderPerAccount(data) {
   }
 }
 
+/**
+ * The messages people sent.
+ *
+ * Built with textContent throughout: this is the one thing on the page written
+ * by a person rather than counted by a query, so it is the one place where
+ * assembling HTML from a string would hand somebody an injection into the
+ * operator's own panel.
+ */
+function renderFeedback(rows) {
+  const host = $('feedback-list');
+  host.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'admin-muted';
+    empty.textContent = 'Nothing yet.';
+    host.appendChild(empty);
+    return;
+  }
+
+  for (const row of rows) {
+    const item = document.createElement('article');
+    item.className = 'feedback-item';
+
+    const head = document.createElement('div');
+    head.className = 'feedback-head';
+    const who = document.createElement('strong');
+    who.textContent = row.fromDemo ? 'From the demo' : row.email || 'Account since deleted';
+    const when = document.createElement('span');
+    when.className = 'admin-muted';
+    when.textContent = `${ago(row.createdAt)}${row.page ? ` · ${row.page}` : ''}`;
+    head.append(who, when);
+
+    const body = document.createElement('p');
+    body.className = 'feedback-message';
+    body.textContent = row.message;
+
+    item.append(head, body);
+
+    if (row.hasScreenshot) {
+      // Loaded on click, not on render: a page of messages should not pull
+      // every attached picture of somebody's balances into the browser because
+      // the operator opened the panel to read a count.
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = `Show the attached picture (${Math.round((row.screenshotBytes || 0) / 1024)} KB)`;
+      const img = document.createElement('img');
+      img.className = 'feedback-shot';
+      img.alt = 'The picture attached to this message';
+      details.addEventListener('toggle', () => {
+        if (details.open && !img.src) img.src = `/api/admin/feedback/${row.id}/screenshot`;
+      });
+      details.append(summary, img);
+      item.appendChild(details);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'settings-actions';
+    const del = document.createElement('button');
+    del.className = 'danger';
+    del.textContent = 'Delete';
+    const delStatus = document.createElement('span');
+    delStatus.className = 'admin-muted';
+    del.addEventListener('click', async () => {
+      del.disabled = true;
+      delStatus.textContent = 'Deleting…';
+      try {
+        const res = await fetch(`/api/admin/feedback/${row.id}`, { method: 'DELETE' });
+        if (res.ok) return void item.remove();
+        delStatus.textContent = 'Could not delete that one';
+        del.disabled = false;
+      } catch {
+        delStatus.textContent = 'Network error';
+        del.disabled = false;
+      }
+    });
+    actions.append(del, delStatus);
+    item.appendChild(actions);
+
+    host.appendChild(item);
+  }
+}
+
+async function loadFeedback() {
+  try {
+    const res = await fetch('/api/admin/feedback');
+    if (!res.ok) throw new Error(`Could not load feedback (${res.status})`);
+    renderFeedback((await res.json()).feedback || []);
+  } catch (err) {
+    // The statistics above are still worth showing if this one call fails.
+    $('feedback-list').textContent = err.message || 'Could not load feedback';
+  }
+}
+
 async function load() {
   const res = await fetch('/api/admin/stats');
   if (res.status === 401) return void (location.href = '/login');
@@ -194,6 +287,7 @@ async function load() {
   renderSignups(data.signups);
   renderUse(data);
   renderPerAccount(data.perAccount);
+  await loadFeedback();
   $('generated').textContent = `Read from the database at ${new Date(data.generatedAt)
     .toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}. Nothing here is tracked — it is all counted on request.`;
 }

@@ -67,6 +67,21 @@ tracked, nothing is sold, and access to your bank is read-only.
   re-pulls the bank. Each key field has a **?** that expands to say what the
   service is, what it costs, and the steps to get a key from it. Keys can be
   rotated later from **Settings → API keys**.
+- **A feedback button** — next to Settings on the dashboard. It opens a form with
+  a message box and one checkbox: *include a picture of this page*. The picture is
+  drawn from the DOM in the browser (`modern-screenshot`, served from this origin
+  because the CSP allows scripts from nowhere else), captured before the dialog
+  opens so the dialog is not in it, and **shown back in the form before anything
+  is sent** — on this site a picture of the page is a picture of somebody's
+  balances, so it is opt-in, previewed, and left behind entirely if the box stays
+  unticked. Only actual PNG bytes are accepted (the magic number is checked, not
+  the client's word), capped at 3MB. Messages appear in **the admin panel**,
+  newest first, with the attached picture loaded only when the operator expands
+  it, and a delete that takes the picture with it. Demo accounts can send feedback
+  too — first impressions are the most useful kind — and are labelled as such
+  rather than shown their generated address. Everything an account sent is
+  deleted with the account, because "delete everything" has to include a
+  screenshot of their own finances that they once sent you.
 - **Capped signups with a waiting list** — at most `MAX_USERS` accounts
   (default 20) may **finish setup**. What the cap rations is this process's
   memory — a place costs a cached transaction pull and an hourly visit from the

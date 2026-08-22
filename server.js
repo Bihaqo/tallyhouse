@@ -38,6 +38,7 @@ const { PgSessionStore } = require('./src/pg-session-store');
 const { buildExport, applyImport } = require('./src/export');
 const sweepScheduler = require('./src/sweep-scheduler');
 const demo = require('./src/demo');
+const feedback = require('./src/feedback');
 const { info: buildInfo } = require('./src/build-info');
 
 const PORT = process.env.PORT || 3000;
@@ -160,6 +161,12 @@ app.use((req, res, next) => {
  */
 app.use('/api/onboarding', requireAuth);
 app.use('/api/onboarding', express.json({ limit: '25mb' }));
+// Feedback may carry a PNG of the page, which the 1MB general limit would
+// reject. Same shape as the import parser above, and for the same reason: the
+// guard is on the prefix so an anonymous caller cannot make this process parse
+// megabytes before a route handler gets to say no.
+app.use('/api/feedback', requireAuth);
+app.use('/api/feedback', express.json({ limit: '5mb' }));
 app.use(express.json({ limit: '1mb' }));
 
 const loginLimiter = rateLimit({
@@ -1102,6 +1109,11 @@ app.post('/api/account/delete', requireAuth, keyLimiter, async (req, res) => {
     gpt.forgetUser(id);
     forgetSummaryUser(id);
     forgetScan(id); // an abandoned setup leaves a merchant list behind it
+    // Explicitly, before the row goes: the foreign key only nulls these out,
+    // which is right for a demo being reaped and wrong here. "Delete my
+    // account and everything in it" has to include a picture of their own
+    // bank balances that they once sent us.
+    await feedback.forgetUser(id);
     await users.deleteAccount(id);
     demo.forget(id); // a no-op unless this was a demo
     // The session row is already gone with the account; this clears the cookie
@@ -1113,11 +1125,98 @@ app.post('/api/account/delete', requireAuth, keyLimiter, async (req, res) => {
   }
 });
 
+/**
+ * Send feedback: a message, and a picture of the page if they asked for one.
+ *
+ * Open to demo accounts on purpose. Somebody trying the demo is the person
+ * whose first impressions are worth the most, and they have the least reason to
+ * write anything down anywhere else.
+ *
+ * Rate-limited per account: this is the one endpoint that writes several
+ * megabytes on request, so it needs a ceiling that does not rely on good
+ * manners. Generous enough that nobody sending real feedback will meet it.
+ */
+const feedbackLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  keyGenerator: perAccount,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'That is a lot of feedback in one hour — try again later' },
+});
+
+app.post('/api/feedback', requireAuth, feedbackLimiter, async (req, res) => {
+  const { message, screenshot, page } = req.body || {};
+  try {
+    await feedback.add({
+      userId: uid(req),
+      fromDemo: isDemoReq(req),
+      message,
+      page,
+      screenshot: screenshot || null,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    const status = err.status || 500;
+    if (status >= 500) console.error('Could not store feedback:', err.message);
+    res.status(status).json({ error: status >= 500 ? 'Could not send your message' : err.message });
+  }
+});
+
 /* ---------- admin ---------- */
 
 // Operator statistics. Everything it reports is derived from data the app
 // already stores — see the note at the top of src/admin.js for why that is a
 // constraint rather than a limitation.
+/**
+ * What people sent in, newest first, and the pictures they attached.
+ *
+ * The pictures are a route of their own rather than part of the list: a page of
+ * messages should not be tens of megabytes because some of them have an image,
+ * and this way the bytes only leave the database when an operator actually
+ * looks at one.
+ */
+app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json({ feedback: await feedback.list() });
+  } catch (err) {
+    console.error('Could not read feedback:', err.message);
+    res.status(500).json({ error: 'Could not load feedback' });
+  }
+});
+
+app.get('/api/admin/feedback/:id/screenshot', requireAuth, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Bad id' });
+  try {
+    const png = await feedback.screenshotOf(id);
+    if (!png) return res.status(404).json({ error: 'No picture on that message' });
+    res.set('Content-Type', 'image/png');
+    // Somebody's bank balances: never in a shared cache, and never guessed at
+    // by a browser sniffing the bytes.
+    res.set('Cache-Control', 'private, no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.send(png);
+  } catch (err) {
+    console.error('Could not read a feedback picture:', err.message);
+    res.status(500).json({ error: 'Could not load that picture' });
+  }
+});
+
+// Dealt with, or sent by mistake. The picture goes with it — there is no
+// archive behind this, which is the point.
+app.delete('/api/admin/feedback/:id', requireAuth, requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Bad id' });
+  try {
+    const gone = await feedback.remove(id);
+    res.status(gone ? 200 : 404).json(gone ? { ok: true } : { error: 'Already gone' });
+  } catch (err) {
+    console.error('Could not delete feedback:', err.message);
+    res.status(500).json({ error: 'Could not delete that message' });
+  }
+});
+
 app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
   try {
     res.json(await admin.stats());
@@ -1169,6 +1268,14 @@ app.get('/admin/app.js', adminPage('admin.js'));
 app.get('/vendor/chart.umd.js', (req, res) => {
   // chart.js's package "exports" hides dist/ from require.resolve
   res.sendFile(path.join(__dirname, 'node_modules', 'chart.js', 'dist', 'chart.umd.js'));
+});
+
+// The DOM-to-PNG renderer behind the optional picture on the feedback form.
+// Served from here rather than a CDN for the same reason as chart.js: the CSP
+// allows scripts from this origin only, and a page that draws somebody's bank
+// balances into a canvas is the last place to start trusting a third party.
+app.get('/vendor/modern-screenshot.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'node_modules', 'modern-screenshot', 'dist', 'index.js'));
 });
 
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));

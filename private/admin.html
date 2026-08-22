@@ -70,16 +70,28 @@
     </section>
 
     <section class="card">
+      <h2>Feedback</h2>
+      <p class="sub">Messages people chose to send, newest first. This is the one part of the panel
+        that names anybody, and it is the one part where somebody wrote to you on purpose — the
+        counts above are still nobody's in particular. A picture is only here because the person
+        sending it ticked a box and looked at it first. Delete removes the message and its picture
+        outright; there is no archive behind this page.</p>
+      <div id="feedback-list"></div>
+    </section>
+
+    <section class="card">
       <h2>What this panel cannot tell you</h2>
       <p class="sub">Every number above is read from data the app already had to keep. There is no
         event log and no page-view record, because the privacy policy says "no analytics, no
         tracking" and a first-party cookieless one would still be analytics. So:</p>
       <ul class="admin-limits">
-        <li><strong>Who anybody is.</strong> This one is a choice, not a gap: the database knows
-          every address, and the queries behind this page decline to select them. Anything that
-          genuinely needs one account — a support request, a deletion — goes through psql, where it
-          costs a deliberate act instead of a glance. With only a handful of accounts, note that an
-          average is never far from an individual either.</li>
+        <li><strong>Who anybody is</strong>, in any of the numbers. That is a choice, not a gap:
+          the database knows every address, and the queries behind them decline to select it. The
+          feedback above is the deliberate exception, and the distinction is the whole point —
+          somebody wrote that message to you, rather than being counted while they used the app.
+          Anything else that genuinely needs one account — a support request, a deletion — goes
+          through psql, where it costs a deliberate act instead of a glance. With only a handful of
+          accounts, note that an average is never far from an individual either.</li>
         <li><strong>Which page someone abandoned</strong> is not recorded anywhere, and no
           reconstruction of it exists.</li>
         <li><strong>Last activity</strong> is not available. It looks like it should be —

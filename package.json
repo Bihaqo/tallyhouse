@@ -2,9 +2,12 @@
   "name": "tallyhouse",
   "version": "1.0.0",
   "private": true,
-  "description": "Tallyhouse — personal finance dashboard backed by the Lunchflow API",
+  "description": "Tallyhouse \u2014 personal finance dashboard backed by the Lunchflow API",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/Bihaqo/tallyhouse.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bihaqo/tallyhouse.git"
+  },
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -20,6 +23,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.3.1",
     "express-session": "^1.18.0",
+    "modern-screenshot": "^4.7.0",
     "pg": "^8.22.0"
   }
 }

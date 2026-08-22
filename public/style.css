@@ -231,6 +231,78 @@ table.cats tr.providers-total td { font-weight: 650; border-top: 1px solid var(-
 }
 .login-card .demo-btn[hidden] { display: none; }
 
+/* The feedback form. */
+#feedback-modal textarea {
+  width: 100%;
+  font: inherit;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--text-primary);
+  resize: vertical;
+}
+.feedback-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.feedback-attach {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.feedback-attach input { margin-top: 3px; }
+/* Bounded, because the preview is a full page drawn into an image and would
+   otherwise be taller than the dialog it is meant to be checked inside. */
+#feedback-preview {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+#feedback-preview[hidden] { display: none; }
+#feedback-preview img { display: block; width: 100%; }
+
+/* Feedback in the admin panel. */
+.feedback-item {
+  padding: 14px 0;
+  border-top: 1px solid var(--grid);
+}
+.feedback-item:first-child { border-top: 0; }
+.feedback-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.feedback-message {
+  margin: 8px 0;
+  white-space: pre-wrap; /* the line breaks they typed are part of the message */
+  overflow-wrap: anywhere; /* and an unbroken 4000-character word cannot widen the page */
+}
+/* A full-page capture is several thousand pixels tall, and inlining one at full
+   height buried the delete button under it and made the panel unnavigable. It
+   scrolls inside its own box instead; opening it in a tab gives the full thing. */
+.feedback-item details[open] {
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--grid);
+  border-radius: 6px;
+  padding: 8px;
+  margin-top: 6px;
+}
+.feedback-shot {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
 .err {
   color: var(--danger);
   font-size: 13.5px;

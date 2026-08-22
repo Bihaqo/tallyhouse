@@ -85,6 +85,31 @@ CREATE TABLE IF NOT EXISTS waitlist (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Feedback people chose to send, with an optional picture of the page they were
+-- looking at. Nothing here is collected: a row exists only because somebody
+-- typed a message and pressed send, and the picture only if they also ticked
+-- the box for it.
+--
+-- ON DELETE SET NULL rather than CASCADE, with the account-deletion route
+-- deleting these rows explicitly. The two callers want opposite things and a
+-- constraint cannot tell them apart: someone deleting their account is promised
+-- that everything of theirs goes, including a screenshot of their own finances,
+-- while a demo account being reaped should leave its first impressions behind —
+-- there is nothing personal in feedback about invented data, and it is the most
+-- useful feedback there is.
+CREATE TABLE IF NOT EXISTS feedback (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  from_demo  BOOLEAN NOT NULL DEFAULT false,
+  message    TEXT NOT NULL,
+  -- Which view they were on, so a report about "the chart" can be placed.
+  page       TEXT,
+  -- PNG bytes, null unless they asked for it to be sent.
+  screenshot BYTEA,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS feedback_created_idx ON feedback (created_at DESC);
+
 -- express-session store (replaces the old JSON file store).
 CREATE TABLE IF NOT EXISTS user_sessions (
   sid    TEXT PRIMARY KEY,

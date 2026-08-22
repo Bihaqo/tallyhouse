@@ -19,6 +19,7 @@
       <a class="btn topbar-link" href="/about">About</a>
       <a class="btn topbar-link" href="/privacy">Privacy</a>
       <a class="btn topbar-link" href="/terms">Terms</a>
+      <button id="feedback-btn">Feedback</button>
       <button id="settings-btn">Settings</button>
       <button id="refresh">Refresh</button>
       <button id="logout">Log out</button>
@@ -314,9 +315,42 @@
     </div>
   </dialog>
 
+  <dialog id="feedback-modal">
+    <h2>Send feedback</h2>
+    <p class="sub">Anything at all — something broken, something confusing, something missing. It
+      goes to whoever runs this instance and nowhere else.</p>
+
+    <label class="feedback-label" for="feedback-message">Your message</label>
+    <textarea id="feedback-message" rows="6" placeholder="What happened, and what you expected instead"></textarea>
+
+    <!-- Off by default, and worth leaving off unless the problem is visual: on
+         this page a picture of the screen is a picture of your balances. -->
+    <label class="feedback-attach">
+      <input type="checkbox" id="feedback-screenshot" />
+      <span>Include a picture of this page. <strong>It will show whatever is on screen now,
+        including amounts and merchant names.</strong> Have a look below before you send it.</span>
+    </label>
+
+    <div id="feedback-preview" hidden>
+      <img id="feedback-preview-img" alt="The picture that will be sent with your message" />
+    </div>
+    <p class="field-hint" id="feedback-capture-note" hidden></p>
+
+    <p class="field-hint">Sent with your message: which page you were on, and the email address you
+      signed in with, so there is a way to answer you. Nothing else.</p>
+
+    <p class="tx-search-status" id="feedback-status"></p>
+    <div class="modal-actions">
+      <button class="primary" id="feedback-send">Send</button>
+      <button id="feedback-cancel" type="button">Cancel</button>
+    </div>
+  </dialog>
+
   <script src="/vendor/chart.umd.js"></script>
   <script src="/currency.js"></script>
   <script src="/app.js"></script>
+  <script src="/vendor/modern-screenshot.js"></script>
+  <script src="/feedback.js"></script>
   <script src="/build.js"></script>
 </body>
 </html>
